@@ -385,9 +385,18 @@ extension GenerationResultView {
     }
     
     private func shareMusic() {
-        // Implement share functionality with specific text
-        let shareText = "So amazing song based my inspiration created by Musai https://apps.apple.com/app/id6454842768"
-        let activityVC = UIActivityViewController(activityItems: [shareText], applicationActivities: nil)
+        let shareText = "I created an amazing song with the Musai app https://apps.apple.com/app/id6754842768"
+        
+        // 获取歌曲封面
+        var shareImage: UIImage = UIImage()
+        if let image = coverImage {
+            shareImage = image
+        }
+        
+        let activityVC = UIActivityViewController(
+            activityItems: [shareText, shareImage, title],
+            applicationActivities: nil
+        )
         
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let window = windowScene.windows.first {

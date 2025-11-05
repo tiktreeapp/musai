@@ -473,9 +473,17 @@ struct TrackDetailView: View {
     }
     
     private func shareTrack() {
-        let shareText = "So amazing song based my inspiration created by Musai https://apps.apple.com/app/id6454842768"
+        let shareText = "I created an amazing song with the Musai app https://apps.apple.com/app/id6754842768"
+        
+        // 获取歌曲封面
+        var coverImage: UIImage = UIImage()
+        if let imageData = track.imageData,
+           let uiImage = UIImage(data: imageData) {
+            coverImage = uiImage
+        }
+        
         let activityVC = UIActivityViewController(
-            activityItems: [shareText, track.title],
+            activityItems: [shareText, coverImage, track.title],
             applicationActivities: nil
         )
         
@@ -844,8 +852,15 @@ struct SettingsView: View {
     }
     
     private func shareApp() {
-        let shareText = "So amazing song based my inspiration created by Musai https://apps.apple.com/app/id6454842768"
-        let activityVC = UIActivityViewController(activityItems: [shareText], applicationActivities: nil)
+        let shareText = "So great Musai app turned musical inspiration into a nice song. https://apps.apple.com/app/id6754842768"
+        
+        // 获取应用图标
+        let appIcon = UIImage(named: "AppIcon") ?? UIImage()
+        
+        let activityVC = UIActivityViewController(
+            activityItems: [shareText, appIcon],
+            applicationActivities: nil
+        )
         
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let window = windowScene.windows.first {
