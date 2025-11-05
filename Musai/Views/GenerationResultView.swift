@@ -398,17 +398,26 @@ extension GenerationResultView {
             applicationActivities: nil
         )
         
-        // 确保在主线程上展示
+        // 使用正确的方式获取当前视图控制器
         DispatchQueue.main.async {
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first {
+               let window = windowScene.windows.first,
+               let rootViewController = window.rootViewController {
+                
+                // 找到当前展示的视图控制器
+                var topViewController = rootViewController
+                while let presentedViewController = topViewController.presentedViewController {
+                    topViewController = presentedViewController
+                }
+                
                 // 对于iPad，需要设置sourceView
                 if let popover = activityVC.popoverPresentationController {
-                    popover.sourceView = window
-                    popover.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+                    popover.sourceView = topViewController.view
+                    popover.sourceRect = CGRect(x: topViewController.view.bounds.midX, y: topViewController.view.bounds.midY, width: 0, height: 0)
                     popover.permittedArrowDirections = []
                 }
-                window.rootViewController?.present(activityVC, animated: true)
+                
+                topViewController.present(activityVC, animated: true)
             }
         }
     }
