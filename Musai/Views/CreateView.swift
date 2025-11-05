@@ -549,35 +549,50 @@ struct CreateButtonView: View {
                 isCreating = false
                 return
             }
-            let musicTrack = MusicTrack(
-                title: params.title,
-                lyrics: params.lyrics,
-                style: params.selectedStyle,
-                mode: params.selectedMode,
-                speed: params.selectedSpeed,
-                instrumentation: params.selectedInstrumentation,
-                vocal: params.selectedVocal,
-                imageData: finalImageData
-            )
-            musicTrack.audioURL = musicURL.absoluteString
+            // 验证音乐URL是否有效
+            print("🔍 Validating music URL...")
+            let (validateData, validateResponse) = try await URLSession.shared.data(from: musicURL)
             
-            print("💾 Saving to database...")
-            params.modelContext.insert(musicTrack)
-            try params.modelContext.save()
-            print("✅ Saved to database successfully")
-            
-            // 异步缓存音乐到本地和云端
-            Task {
-                await cacheMusicAfterGeneration(musicTrack: musicTrack, musicURL: musicURL)
+            if let httpResponse = validateResponse as? HTTPURLResponse,
+               httpResponse.statusCode == 200,
+               !validateData.isEmpty {
+                print("✅ Music URL validation successful")
+                
+                // 创建音乐记录
+                print("🎵 Creating music track record...")
+                let musicTrack = MusicTrack(
+                    title: params.title,
+                    lyrics: params.lyrics,
+                    style: params.selectedStyle,
+                    mode: params.selectedMode,
+                    speed: params.selectedSpeed,
+                    instrumentation: params.selectedInstrumentation,
+                    vocal: params.selectedVocal,
+                    imageData: finalImageData
+                )
+                musicTrack.audioURL = musicURL.absoluteString
+                
+                print("💾 Saving to database...")
+                params.modelContext.insert(musicTrack)
+                try params.modelContext.save()
+                print("✅ Saved to database successfully")
+                
+                // 异步缓存音乐到本地和云端
+                Task {
+                    await cacheMusicAfterGeneration(musicTrack: musicTrack, musicURL: musicURL)
+                }
+                
+                // Wait 3 seconds then show result
+                print("⏳ Waiting 3 seconds before showing result...")
+                try await Task.sleep(nanoseconds: 3_000_000_000)
+                
+                params.generatedMusicURL = musicURL.absoluteString
+                params.showingGenerationResult = true
+                print("✅ Navigation to result page triggered")
+            } else {
+                print("❌ Music URL validation failed - status code: \((validateResponse as? HTTPURLResponse)?.statusCode ?? -1)")
+                throw MusicGenerationError.invalidResponse
             }
-            
-            // Wait 3 seconds then show result
-            print("⏳ Waiting 3 seconds before showing result...")
-            try await Task.sleep(nanoseconds: 3_000_000_000)
-            
-            params.generatedMusicURL = musicURL.absoluteString
-            params.showingGenerationResult = true
-            print("✅ Navigation to result page triggered")
             
         } catch {
             print("❌ Error creating music: \(error.localizedDescription)")
