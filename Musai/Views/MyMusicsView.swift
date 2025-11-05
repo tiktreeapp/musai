@@ -476,20 +476,29 @@ struct TrackDetailView: View {
         let shareText = "I created an amazing song with the Musai app https://apps.apple.com/app/id6754842768"
         
         // 获取歌曲封面
-        var coverImage: UIImage = UIImage()
+        var shareItems: [Any] = [shareText, track.title]
         if let imageData = track.imageData,
            let uiImage = UIImage(data: imageData) {
-            coverImage = uiImage
+            shareItems.append(uiImage)
         }
         
         let activityVC = UIActivityViewController(
-            activityItems: [shareText, coverImage, track.title],
+            activityItems: shareItems,
             applicationActivities: nil
         )
         
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            window.rootViewController?.present(activityVC, animated: true)
+        // 确保在主线程上展示
+        DispatchQueue.main.async {
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first {
+                // 对于iPad，需要设置sourceView
+                if let popover = activityVC.popoverPresentationController {
+                    popover.sourceView = window
+                    popover.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+                    popover.permittedArrowDirections = []
+                }
+                window.rootViewController?.present(activityVC, animated: true)
+            }
         }
     }
     
@@ -854,17 +863,29 @@ struct SettingsView: View {
     private func shareApp() {
         let shareText = "So great Musai app turned musical inspiration into a nice song. https://apps.apple.com/app/id6754842768"
         
-        // 获取应用图标
-        let appIcon = UIImage(named: "AppIcon") ?? UIImage()
+        // 获取应用图标 - 使用更可靠的方式
+        var shareItems: [Any] = [shareText]
+        if let appIcon = UIImage(named: "AppIcon") {
+            shareItems.append(appIcon)
+        }
         
         let activityVC = UIActivityViewController(
-            activityItems: [shareText, appIcon],
+            activityItems: shareItems,
             applicationActivities: nil
         )
         
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            window.rootViewController?.present(activityVC, animated: true)
+        // 确保在主线程上展示
+        DispatchQueue.main.async {
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first {
+                // 对于iPad，需要设置sourceView
+                if let popover = activityVC.popoverPresentationController {
+                    popover.sourceView = window
+                    popover.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+                    popover.permittedArrowDirections = []
+                }
+                window.rootViewController?.present(activityVC, animated: true)
+            }
         }
     }
     

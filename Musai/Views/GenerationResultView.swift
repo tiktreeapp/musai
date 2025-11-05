@@ -388,19 +388,28 @@ extension GenerationResultView {
         let shareText = "I created an amazing song with the Musai app https://apps.apple.com/app/id6754842768"
         
         // 获取歌曲封面
-        var shareImage: UIImage = UIImage()
+        var shareItems: [Any] = [shareText, title]
         if let image = coverImage {
-            shareImage = image
+            shareItems.append(image)
         }
         
         let activityVC = UIActivityViewController(
-            activityItems: [shareText, shareImage, title],
+            activityItems: shareItems,
             applicationActivities: nil
         )
         
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            window.rootViewController?.present(activityVC, animated: true)
+        // 确保在主线程上展示
+        DispatchQueue.main.async {
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first {
+                // 对于iPad，需要设置sourceView
+                if let popover = activityVC.popoverPresentationController {
+                    popover.sourceView = window
+                    popover.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+                    popover.permittedArrowDirections = []
+                }
+                window.rootViewController?.present(activityVC, animated: true)
+            }
         }
     }
     
