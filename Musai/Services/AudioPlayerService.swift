@@ -35,7 +35,18 @@ class AudioPlayerService: NSObject, ObservableObject {
     }
     
     func loadAudio(from url: URL) {
-        print("🎵 Creating player item for URL: \(url)")
+        print("🎵 Loading new audio from URL: \(url)")
+        
+        // 停止当前播放并清理状态
+        stop()
+        isPlaying = false
+        currentTime = 0.0
+        duration = 0.0
+        
+        // 清理旧的观察者
+        cancellables.removeAll()
+        
+        // 创建新的播放器和项目
         playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)
         
