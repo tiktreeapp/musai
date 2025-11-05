@@ -473,10 +473,10 @@ struct TrackDetailView: View {
     }
     
     private func shareTrack() {
-        let shareText = "I created an amazing song with the Musai app https://apps.apple.com/app/id6754842768"
+        let shareText = "I created an amazing song \"\(track.title)\" with the Musai app https://apps.apple.com/app/id6754842768"
         
         // 获取歌曲封面
-        var shareItems: [Any] = [shareText, track.title]
+        var shareItems: [Any] = [shareText]
         if let imageData = track.imageData,
            let uiImage = UIImage(data: imageData) {
             shareItems.append(uiImage)

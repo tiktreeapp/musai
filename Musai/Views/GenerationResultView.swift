@@ -385,10 +385,10 @@ extension GenerationResultView {
     }
     
     private func shareMusic() {
-        let shareText = "I created an amazing song with the Musai app https://apps.apple.com/app/id6754842768"
+        let shareText = "I created an amazing song \"\(title)\" with the Musai app https://apps.apple.com/app/id6754842768"
         
         // 获取歌曲封面
-        var shareItems: [Any] = [shareText, title]
+        var shareItems: [Any] = [shareText]
         if let image = coverImage {
             shareItems.append(image)
         }
