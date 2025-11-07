@@ -293,7 +293,7 @@ struct TrackDetailView: View {
     let track: MusicTrack
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var audioPlayer = AudioPlayerService()
+    @StateObject private var audioPlayer = AudioPlayerService()
     @State private var isPlaying = false
     @State private var isFavorite = false
     @State private var showingDeleteAlert = false
