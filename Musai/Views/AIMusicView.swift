@@ -169,7 +169,6 @@ struct AIMusicSection: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MusicTrack.createdAt, order: .reverse) private var musicTracks: [MusicTrack]
     @State private var selectedTrack: MusicTrack?
-    @State private var showingTrackDetail = false
     @StateObject private var storageService = MusicStorageService.shared
     @State private var isUploadingToCloud = false
     @State private var uploadProgress: Double = 0.0
@@ -243,7 +242,6 @@ struct AIMusicSection: View {
                     ForEach(displayTracks, id: \.id) { track in
                         AIMusicTrackRow(track: track) {
                             selectedTrack = track
-                            showingTrackDetail = true
                         }
                     }
                 }
@@ -255,11 +253,8 @@ struct AIMusicSection: View {
                 await loadCloudTracks()
             }
         }
-        .sheet(isPresented: $showingTrackDetail) {
-            if let track = selectedTrack {
-                TrackDetailView(track: track)
-                    .id(track.id)  // 确保track变化时视图正确重建
-            }
+        .sheet(item: $selectedTrack) { track in
+            TrackDetailView(track: track)
         }
     }
     
@@ -336,7 +331,7 @@ struct AIMusicSection: View {
 struct AIMusicTrackRow: View {
     let track: MusicTrack
     let onTap: () -> Void
-    @State private var audioPlayer = AudioPlayerService()
+    @StateObject private var audioPlayer = AudioPlayerService()
     @State private var storageService = MusicStorageService.shared
     
     var body: some View {

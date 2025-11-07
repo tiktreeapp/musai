@@ -747,10 +747,9 @@ struct CreateButtonView: View {
                 try params.modelContext.save()
                 print("✅ Saved to database successfully")
                 
-                // 异步缓存音乐到本地和云端
-                Task {
-                    await cacheMusicAfterGeneration(musicTrack: musicTrack, musicURL: musicURL)
-                }
+                // 同步缓存音乐到本地和云端
+                print("💾 Caching music locally and to cloud...")
+                await cacheMusicAfterGeneration(musicTrack: musicTrack, musicURL: musicURL)
                 
                 // Wait 3 seconds then show result
                 print("⏳ Waiting 3 seconds before showing result...")
@@ -798,17 +797,24 @@ struct CreateButtonView: View {
             let localURL = try await storageService.saveMusicLocally(musicURL: musicURL, musicTrack: musicTrack)
             print("✅ Local cache saved: \(localURL.lastPathComponent)")
             
-            // 2. 后台上传到Cloudinary
-            print("☁️ Starting cloud upload...")
-            do {
-                let cloudinaryURL = try await storageService.uploadMusicToCloudinary(musicTrack: musicTrack)
-                print("✅ Uploaded to Cloudinary: \(cloudinaryURL)")
-            } catch {
-                print("❌ Cloud upload failed: \(error.localizedDescription)")
+            // 2. 后台上传到Cloudinary（不阻塞主流程）
+            print("☁️ Starting background cloud upload...")
+            Task.detached {
+                do {
+                    let cloudinaryURL = try await storageService.uploadMusicToCloudinary(musicTrack: musicTrack)
+                    print("✅ Uploaded to Cloudinary: \(cloudinaryURL)")
+                } catch {
+                    print("❌ Cloud upload failed: \(error.localizedDescription)")
+                    // 可以在这里添加重试逻辑或记录上传失败状态
+                }
             }
             
         } catch {
             print("❌ Cache failed: \(error.localizedDescription)")
+            // 记录缓存失败状态
+            await MainActor.run {
+                musicTrack.isCachedLocally = false
+            }
         }
     }
 }

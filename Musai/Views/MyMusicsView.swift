@@ -12,7 +12,6 @@ struct MyMusicsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MusicTrack.createdAt, order: .reverse) private var musicTracks: [MusicTrack]
     @State private var selectedTrack: MusicTrack?
-    @State private var showingTrackDetail = false
     @State private var showingSettings = false
     @State private var selectedTab: MusicTab = .history
     
@@ -40,7 +39,6 @@ struct MyMusicsView: View {
                             ForEach(filteredTracks) { track in
                                 MusicTrackCard(track: track) {
                                     selectedTrack = track
-                                    showingTrackDetail = true
                                 }
                             }
                         }
@@ -68,11 +66,8 @@ struct MyMusicsView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
-        .sheet(isPresented: $showingTrackDetail) {
-            if let track = selectedTrack {
-                TrackDetailView(track: track)
-                    .id(track.id)  // 确保track变化时视图正确重建
-            }
+        .sheet(item: $selectedTrack) { track in
+            TrackDetailView(track: track)
         }
     }
     
@@ -407,9 +402,6 @@ struct TrackDetailView: View {
             }
         }
         .onAppear {
-            // 重新初始化音频播放器以确保状态正确
-            audioPlayer = AudioPlayerService()
-            
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 let storageService = MusicStorageService.shared
                 // 使用storageService获取可播放的URL并加载音频
