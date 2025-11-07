@@ -9,6 +9,7 @@ import SwiftUI
 import PhotosUI
 import SwiftData
 import UIKit
+import StoreKit
 
 struct CreateView: View {
     enum LyricsMode: String, CaseIterable {
@@ -29,15 +30,13 @@ struct CreateView: View {
     @State private var lyricsMode: LyricsMode = .aiLyrics
     @State private var isGeneratingLyrics = false
     @State private var hasPastedLyrics = false // 标记是否已粘贴歌词
-    
-    
     @State private var showingGenerationResult = false
     @State private var generatedMusicURL: String?
-    
-    
+    @State private var showingSubscription = false  // 新增：用于显示订阅页面
     @Environment(\.modelContext) private var modelContext
     @StateObject private var musicService = MusicGenerationService()
     @State private var isCreating = false
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
     
     
     private var currentLyrics: String {
@@ -54,7 +53,10 @@ struct CreateView: View {
         // 在AI Lyrics模式下，即使没有歌词也可以创建（因为会自动生成）
         let canCreateInCurrentMode = lyricsMode == .aiLyrics || hasLyrics
         
-        return hasTitle && canCreateInCurrentMode && hasImage && notCreating && notGeneratingLyrics
+        // 检查是否有足够的钻石创建歌曲
+        let hasEnoughDiamonds = SubscriptionManager.shared.canCreateSong()
+        
+        return hasTitle && canCreateInCurrentMode && hasImage && notCreating && notGeneratingLyrics && hasEnoughDiamonds
     }
     
     private var createButtonParams: CreateButtonParams {
@@ -71,6 +73,9 @@ struct CreateView: View {
             isGeneratingLyrics: isGeneratingLyrics,
             musicService: musicService,
             modelContext: modelContext,
+            onInsufficientDiamonds: {
+                showingSubscription = true
+            },
             showingGenerationResult: $showingGenerationResult,
             generatedMusicURL: $generatedMusicURL,
             canCreate: Binding(
@@ -101,7 +106,7 @@ struct CreateView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 18) {  // 减少Title到Upload a photo区域的距离24像素
+                VStack(spacing: 24) {  // 增加组件间距离24像素
                     // Image Upload Section
                     ImageUploadSection(
                         selectedImage: $selectedImage, 
@@ -112,7 +117,7 @@ struct CreateView: View {
                     // Title Input
                     TextInputSection(title: "Title", text: $title, placeholder: "Enter your music title")
                     
-                    // Lyrics Input
+                    // Lyrics Input - 与上方Title的距离增加24像素
                     LyricsInputSection(
                         aiLyrics: $aiLyrics,
                         ownLyrics: $ownLyrics,
@@ -122,7 +127,7 @@ struct CreateView: View {
                         hasPastedLyrics: $hasPastedLyrics
                     )
                     
-                    // Options Section
+                    // Options Section - 与上方Lyrics的距离增加24像素
                     OptionsSection(
                         selectedStyle: $selectedStyle,
                         selectedMode: $selectedMode,
@@ -131,16 +136,33 @@ struct CreateView: View {
                         selectedVocal: $selectedVocal
                     )
                     
-                    // Create Button
+                    // Create Button - 与上方Options的距离增加24像素
                     CreateButtonView(params: createButtonParams, isCreating: $isCreating)
-                        .padding(.bottom, 48)  // 增加到底部的距离48像素
+                        .padding(.top, 24)
+                    
+                    // 增加24像素间距
+                    Spacer()
+                        .frame(height: 24)
+                    
+                    // 增加48像素底部间距
+                    Spacer()
+                        .frame(height: 48)
                 }
-                .padding(.horizontal, 0)  // 调整为与各元素相同的边距
+                .padding(.horizontal, 16)
                 .padding(.top, -4)  // 上移24像素 (20-24=-4)
             }
             .musaiBackground()
             .navigationTitle("Create")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack {
+                        Text("💎 \(SubscriptionManager.shared.diamondCount)")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Theme.textColor)
+                    }
+                }
+            }
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .onChange(of: selectedImageItem) { _, newItem in
@@ -156,12 +178,15 @@ struct CreateView: View {
                 GenerationResultView(
                     musicURL: imageURL,
                     title: title,
-                    lyrics: lyricsMode == .aiLyrics ? aiLyrics : ownLyrics,
+                    lyrics: currentLyrics,
                     style: selectedStyle,
                     mode: selectedMode,
                     coverImage: selectedImage
                 )
             }
+        }
+        .sheet(isPresented: $showingSubscription) {
+            SubscriptionView()
         }
         
     }
@@ -525,6 +550,10 @@ struct CreateButtonParams {
     let isGeneratingLyrics: Bool
     let musicService: MusicGenerationService
     let modelContext: ModelContext
+    
+    // 回调函数，用于处理钻石不足的情况
+    let onInsufficientDiamonds: () -> Void
+    
     @Binding var showingGenerationResult: Bool
     @Binding var generatedMusicURL: String?
     
@@ -548,6 +577,7 @@ struct CreateButtonParams {
         isGeneratingLyrics: Bool,
         musicService: MusicGenerationService,
         modelContext: ModelContext,
+        onInsufficientDiamonds: @escaping () -> Void,
         showingGenerationResult: Binding<Bool>,
         generatedMusicURL: Binding<String?>,
         canCreate: Binding<Bool>,
@@ -568,6 +598,7 @@ struct CreateButtonParams {
         self.isGeneratingLyrics = isGeneratingLyrics
         self.musicService = musicService
         self.modelContext = modelContext
+        self.onInsufficientDiamonds = onInsufficientDiamonds
         self._showingGenerationResult = showingGenerationResult
         self._generatedMusicURL = generatedMusicURL
         
@@ -627,30 +658,47 @@ struct CreateButtonView: View {
                 await createMusic()
             }
         }) {
-            HStack {
-                if isCreating {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: Color.white))
-                        .scaleEffect(0.8)
-                    Text("Creating")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(Color.white)
-                        .padding(.leading, 8)
-                } else {
-                    Text("Create")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(Color.white)
-                    
-                    Image(systemName: "music.note")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(Color.white)
+            ZStack(alignment: .topTrailing) {
+                HStack {
+                    if isCreating {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.white))
+                            .scaleEffect(0.8)
+                        Text("Creating")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(Color.white)
+                            .padding(.leading, 8)
+                    } else {
+                        Text("Create")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(Color.white)
+                        
+                        Image(systemName: "music.note")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(Color.white)
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(isCreating ? Theme.secondaryTextColor : (canCreate ? Theme.primaryColor : Theme.secondaryTextColor))
+                .cornerRadius(28)
+                .padding(.horizontal, 65)  // 占据80%宽度 (左右各10%)
+                
+                // 钻石角标
+                HStack(spacing: 2) {
+                    Text("💎")
+                        .font(.system(size: 10))
+                        .foregroundColor(.black)
+                    Text("10")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.black)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.white)
+                .cornerRadius(8)
+                .offset(x: -10, y: -10)  // 调整位置到右上角
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .background(isCreating ? Theme.secondaryTextColor : (canCreate ? Theme.primaryColor : Theme.secondaryTextColor))
-            .cornerRadius(28)
-            .padding(.horizontal, 65)  // 占据80%宽度 (左右各10%)
         }
         .disabled(!canCreate || isCreating)
         .buttonStyle(PlainButtonStyle())
@@ -658,6 +706,15 @@ struct CreateButtonView: View {
     }
     
     private func createMusic() async {
+        // 检查是否有足够的钻石
+        if !SubscriptionManager.shared.canCreateSong() {
+            print("💎 Not enough diamonds to create song, showing subscription view")
+            // 调用回调函数显示订阅页面
+            params.onInsufficientDiamonds()
+            params.isCreatingBinding.wrappedValue = false
+            return
+        }
+        
         print("🎵 Starting music creation process")
         params.isCreatingBinding.wrappedValue = true
         
@@ -758,6 +815,9 @@ struct CreateButtonView: View {
                 params.generatedMusicURL = musicURL.absoluteString
                 params.showingGenerationResult = true
                 print("✅ Navigation to result page triggered")
+                
+                // 使用钻石
+                SubscriptionManager.shared.useDiamonds()
             } else {
                 print("❌ Music URL validation failed - status code: \((validateResponse as? HTTPURLResponse)?.statusCode ?? -1)")
                 throw MusicGenerationError.invalidResponse

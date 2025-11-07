@@ -6,10 +6,14 @@
 //
 
 import SwiftUI
+import PhotosUI
 import SwiftData
+import StoreKit
 
 struct AIMusicView: View {
     @State private var showingSettings = false
+    @State private var showingSubscription = false
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
     
     var body: some View {
         NavigationView {
@@ -36,6 +40,25 @@ struct AIMusicView: View {
             .navigationTitle("AI Music")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        showingSubscription = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "crown.fill")
+                            Text(subscriptionManager.currentSubscriptionType != .none ? 
+                                (subscriptionManager.currentSubscriptionType == .weekly ? "Weekly" : "Monthly") : 
+                                "Premium")
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Theme.backgroundColor)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(Theme.primaryColor)
+                        .cornerRadius(16)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showingSettings = true
@@ -50,6 +73,9 @@ struct AIMusicView: View {
         .navigationViewStyle(StackNavigationViewStyle())
         .sheet(isPresented: $showingSettings) {
             SettingsView()
+        }
+        .sheet(isPresented: $showingSubscription) {
+            SubscriptionView()
         }
     }
 }

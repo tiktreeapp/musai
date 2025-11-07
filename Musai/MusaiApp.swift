@@ -27,6 +27,15 @@ struct MusaiApp: App {
         WindowGroup {
             MainTabView()
                 .preferredColorScheme(.dark)
+                .onAppear {
+                    // 初始化订阅管理器
+                    SubscriptionManager.shared.loadDiamondCount()
+                    // 获取订阅产品
+                    Task {
+                        await SubscriptionManager.shared.fetchProducts()
+                        await SubscriptionManager.shared.checkSubscriptionStatus()
+                    }
+                }
         }
         .modelContainer(sharedModelContainer)
     }

@@ -19,9 +19,9 @@ struct NetworkConfig {
     let replicateModel = "minimax/music-1.5"
     
     // Cloudinary Configuration
-    let cloudinaryCloudName = ProcessInfo.processInfo.environment["CLOUDINARY_CLOUD_NAME"] ?? "dygx9d3gi"
-    let cloudinaryAPIKey = ProcessInfo.processInfo.environment["CLOUDINARY_API_KEY"] ?? "771822174588294"
-    let cloudinaryAPISecret = ProcessInfo.processInfo.environment["CLOUDINARY_API_SECRET"] ?? "r_eWr4nK5jdpK5yWRNVkL7i6wY4"
+    let cloudinaryCloudName = ProcessInfo.processInfo.environment["CLOUDINARY_CLOUD_NAME"] ?? ""
+    let cloudinaryAPIKey = ProcessInfo.processInfo.environment["CLOUDINARY_API_KEY"] ?? ""
+    let cloudinaryAPISecret = ProcessInfo.processInfo.environment["CLOUDINARY_API_SECRET"] ?? ""
     let cloudinaryUploadPreset = "musai_unsigned"
     
     // API Endpoints

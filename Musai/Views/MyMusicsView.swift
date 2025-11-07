@@ -867,6 +867,17 @@ struct SettingsView: View {
                 .padding(.bottom, 16)
                 
                 List {
+                    Section("Subscription") {
+                        NavigationLink(destination: SubscriptionView()) {
+                            HStack {
+                                Image(systemName: "crown")
+                                Text("Go Premium")
+                                Spacer()
+                            }
+                        }
+                        .foregroundColor(Theme.textColor)
+                    }
+                    
                     Section("Support") {
                         Button(action: {
                             shareApp()
@@ -898,7 +909,7 @@ struct SettingsView: View {
                             Image(systemName: "info.circle")
                             Text("Version")
                             Spacer()
-                            Text("1.0.0")
+                            Text("1.1.0")
                                 .foregroundColor(Theme.secondaryTextColor)
                         }
                         
