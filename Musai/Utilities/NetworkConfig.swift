@@ -15,13 +15,13 @@ struct NetworkConfig {
     let serverID = "srv-d42795gdl3ps73ee86ng"
     
     // Replicate API Configuration
-    let replicateAPIKey = "[REPLICATE_API_KEY]" // 请从环境变量或配置文件中获取
+    let replicateAPIKey = ProcessInfo.processInfo.environment["REPLICATE_API_KEY"] ?? ""
     let replicateModel = "minimax/music-1.5"
     
     // Cloudinary Configuration
-    let cloudinaryCloudName = "[CLOUDINARY_CLOUD_NAME]" // 请从环境变量或配置文件中获取
-    let cloudinaryAPIKey = "[CLOUDINARY_API_KEY]" // 请从环境变量或配置文件中获取
-    let cloudinaryAPISecret = "[CLOUDINARY_API_SECRET]" // 请从环境变量或配置文件中获取
+    let cloudinaryCloudName = ProcessInfo.processInfo.environment["CLOUDINARY_CLOUD_NAME"] ?? "dygx9d3gi"
+    let cloudinaryAPIKey = ProcessInfo.processInfo.environment["CLOUDINARY_API_KEY"] ?? "771822174588294"
+    let cloudinaryAPISecret = ProcessInfo.processInfo.environment["CLOUDINARY_API_SECRET"] ?? "r_eWr4nK5jdpK5yWRNVkL7i6wY4"
     let cloudinaryUploadPreset = "musai_unsigned"
     
     // API Endpoints

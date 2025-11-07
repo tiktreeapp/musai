@@ -52,6 +52,12 @@ enum MusicStyle: String, CaseIterable, Codable {
     case rock = "Rock"
     case jazz = "Jazz"
     case classical = "Classical"
+    case hipHop = "Hip-Hop"
+    case indie = "Indie"
+    case lofi = "Lo-fi"
+    case ambient = "Ambient"
+    case folk = "Folk"
+    case synthwave = "Synthwave"
     
     var displayName: String {
         return self.rawValue
@@ -64,6 +70,9 @@ enum MusicMode: String, CaseIterable, Codable {
     case motivational = "Motivational"
     case reflective = "Reflective"
     case chill = "Chill"
+    case romantic = "Romantic"
+    case dramatic = "Dramatic"
+    case dreamy = "Dreamy"
     
     var displayName: String {
         return self.rawValue
@@ -86,6 +95,11 @@ enum MusicInstrumentation: String, CaseIterable, Codable {
     case synth = "Synth"
     case orchestral = "Orchestral"
     case percussion = "Percussion"
+    case strings = "Strings"
+    case bass = "Bass"
+    case vocalLead = "Vocal Lead"
+    case drums = "Drums"
+    case acousticMix = "Acoustic Mix"
     
     var displayName: String {
         return self.rawValue

@@ -38,7 +38,7 @@ struct GenerationResultView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: geometry.size.width, height: geometry.size.height)
-                        .blur(radius: 30)
+                        .blur(radius: 60)  // 减少虚化程度到原来的一半
                         .opacity(0.6)
                 }
                 
@@ -297,6 +297,7 @@ struct PlayerSection: View {
                         step: 0.1
                     )
                     .accentColor(Theme.primaryColor)
+                    .frame(height: 20)  // 调整高度以减小滑块大小
                     
                     // Duration text
                     Text(formatTime(audioPlayer.duration))
@@ -351,31 +352,84 @@ struct PlayerSection: View {
 // MARK: - Helper Types and Functions
 extension GenerationResultView {
     private func parseLyrics(_ lyrics: String) -> [LyricLine] {
+        // 尝试解析LRC格式
+        if let lrcLyrics = parseLRCLyrics(lyrics) {
+            return lrcLyrics
+        }
+        
+        // 如果不是LRC格式，则使用默认解析方式
         let lines = lyrics.components(separatedBy: .newlines)
         var parsedLines: [LyricLine] = []
         
         for (index, line) in lines.enumerated() {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedLine.isEmpty {
-                // Estimate timestamp based on line position (2 seconds per line as default)
+                // 估算时间戳，基于行索引
                 let timestamp = TimeInterval(index * 2)
-                parsedLines.append(LyricLine(text: trimmedLine, timestamp: timestamp))
+                parsedLines.append(LyricLine(time: timestamp, text: trimmedLine))
             }
         }
         
         return parsedLines
     }
     
+    private func parseLRCLyrics(_ lyrics: String) -> [LyricLine]? {
+        let pattern = #"\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+        
+        let lines = lyrics.components(separatedBy: .newlines)
+        var result: [LyricLine] = []
+        
+        for line in lines {
+            let nsLine = line as NSString
+            if let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) {
+                // 解析分钟、秒、毫秒
+                let minuteRange = match.range(at: 1)
+                let secondRange = match.range(at: 2)
+                let millisecondRange = match.range(at: 3)
+                let textRange = match.range(at: 4)
+                
+                if minuteRange.location != NSNotFound,
+                   secondRange.location != NSNotFound,
+                   millisecondRange.location != NSNotFound,
+                   textRange.location != NSNotFound {
+                    
+                    let minute = Double(nsLine.substring(with: minuteRange)) ?? 0
+                    let second = Double(nsLine.substring(with: secondRange)) ?? 0
+                    let millisecondStr = nsLine.substring(with: millisecondRange)
+                    let millisecondValue = Double(millisecondStr) ?? 0
+                    // 处理可能是两位或三位毫秒的情况
+                    let millisecond = millisecondStr.count > 2 ? millisecondValue / 1000 : millisecondValue / 100 // 两位数按百分秒处理
+                    
+                    let text = nsLine.substring(with: textRange).trimmingCharacters(in: .whitespaces)
+                    
+                    let time = minute * 60 + second + millisecond
+                    result.append(LyricLine(time: time, text: text))
+                }
+            }
+        }
+        
+        return result.isEmpty ? nil : result.sorted { $0.time < $1.time }
+    }
+    
     private func startLyricSync() {
-        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in  // 提高更新频率到每50ms
             let currentTime = audioPlayer.currentTime
             
+            // 查找当前时间对应的歌词行
+            var newIndex = currentLyricIndex
             for (index, lyric) in parsedLyrics.enumerated() {
-                if currentTime >= lyric.timestamp {
-                    if index != currentLyricIndex {
-                        currentLyricIndex = index
-                    }
+                if currentTime >= lyric.time {
+                    newIndex = index
+                } else {
+                    break  // 由于歌词是按时间排序的，找到第一个大于当前时间的歌词后就停止
                 }
+            }
+            
+            if newIndex != currentLyricIndex {
+                currentLyricIndex = newIndex
             }
             
             if !audioPlayer.isPlaying && currentTime >= audioPlayer.duration - 0.5 {

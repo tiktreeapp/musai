@@ -14,9 +14,9 @@ final class MusicStorageService: ObservableObject {
     static let shared = MusicStorageService()
     
     // Cloudinary配置
-    private let cloudinaryCloudName = "[CLOUDINARY_CLOUD_NAME]" // 请从环境变量或配置文件中获取
-    private let cloudinaryAPIKey = "[CLOUDINARY_API_KEY]" // 请从环境变量或配置文件中获取
-    private let cloudinaryAPISecret = "[CLOUDINARY_API_SECRET]" // 请从环境变量或配置文件中获取
+    private let cloudinaryCloudName = "dygx9d3gi"
+    private let cloudinaryAPIKey = "771822174588294"
+    private let cloudinaryAPISecret = "r_eWr4nK5jdpK5yWRNVkL7i6wY4"
     private let uploadPreset = "musai_unsigned"
     
     // 本地缓存管理

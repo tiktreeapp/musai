@@ -36,6 +36,19 @@ class AudioPlayerService: NSObject, ObservableObject {
     
     func loadAudio(from url: URL) {
         print("🎵 Loading new audio from URL: \(url)")
+        print("  🔍 URL scheme: \(url.scheme ?? "unknown")")
+        print("  📁 URL path: \(url.path)")
+        print("  🌐 URL host: \(url.host ?? "none")")
+        
+        // 检查URL是否可访问
+        if url.scheme == "file" {
+            let filePath = url.path
+            if FileManager.default.fileExists(atPath: filePath) {
+                print("  ✅ Local file exists")
+            } else {
+                print("  ❌ Local file does not exist at path: \(filePath)")
+            }
+        }
         
         // 停止当前播放并清理状态
         stop()
@@ -60,6 +73,8 @@ class AudioPlayerService: NSObject, ObservableObject {
                 case .failed:
                     if let error = self?.playerItem?.error {
                         print("❌ Failed to load audio: \(error.localizedDescription)")
+                        print("  🔍 Error domain: \(error._domain)")
+                        print("  🔢 Error code: \(error._code)")
                     }
                 case .unknown:
                     print("⏳ Player status unknown")
@@ -140,7 +155,8 @@ class AudioPlayerService: NSObject, ObservableObject {
     }
     
     private func setupTimeObserver() {
-        let interval = CMTime(seconds: 0.1, preferredTimescale: 1000)
+        // 使用更高精度的时间监听，每50ms回调一次
+        let interval = CMTime(seconds: 0.05, preferredTimescale: 600)
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             self?.currentTime = time.seconds
         }

@@ -7,7 +7,13 @@
 
 import Foundation
 
-struct LyricLine {
+struct LyricLine: Identifiable {
+    let id = UUID()
+    let time: Double      // 秒
     let text: String
-    let timestamp: TimeInterval
+    
+    // 保持与现有代码的兼容性
+    var timestamp: TimeInterval {
+        return time
+    }
 }

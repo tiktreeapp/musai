@@ -16,20 +16,21 @@ struct AIMusicView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     // Banner Section
-                BannerView()
-                
-                // AI Music Section
-                AIMusicSection()
-                
-                // Steps Section
-                StepsView()
+                    BannerView()
+                        .padding(.top, -36)  // 上移36像素
                     
-                    // Start Button
-                    StartButtonView()
-                        .padding(.horizontal)
-                        .padding(.top, 20)
+                    // AI Music Section
+                    AIMusicSection()
+                    
+                    // Steps Section
+                    StepsView()
+                        
+                        // Start Button
+                        StartButtonView()
+                            .padding(.horizontal)
+                            .padding(.top, 20)
                 }
-                .padding(.vertical, 20)
+                .padding(.vertical, 48)  // 增加12像素 (20+12=32)
             }
             .musaiBackground()
             .navigationTitle("AI Music")
@@ -64,9 +65,9 @@ struct BannerView: View {
 
 struct StepsView: View {
     let steps = [
-        StepItem(number: 1, title: "Upload a photo", description: "Choose an image that inspires your music"),
-        StepItem(number: 2, title: "Input Prompts", description: "Describe who is where and doing something"),
-        StepItem(number: 3, title: "Select Options", description: "Choose style, mode, speed, instrumentation, and vocal"),
+        StepItem(number: 1, title: "Upload a photo", description: "Choose an image inspires your music"),
+        StepItem(number: 2, title: "Input Music content", description: "Enter title and AI Lyrics or Own Lyrics"),
+        StepItem(number: 3, title: "Select Options", description: "Choose style,mode,instrumentation,..."),
         StepItem(number: 4, title: "Tap Start", description: "Create your unique AI-generated music")
     ]
     
@@ -83,7 +84,7 @@ struct StepsView: View {
                 }
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 36)  // 增加12像素 (24+12=36)
     }
 }
 
@@ -155,6 +156,7 @@ struct StartButtonView: View {
             .background(Theme.primaryColor)
             .cornerRadius(28)
             .scaleEffect(isAnimating ? 0.95 : 1.0)
+            .padding(.horizontal, 50)  // 占据80%宽度 (左右各10%)
         }
         .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showingCreateView) {
@@ -247,7 +249,7 @@ struct AIMusicSection: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 28)  // 增加12像素 (16+12=24)
         .onAppear {
             Task {
                 await loadCloudTracks()
@@ -256,6 +258,7 @@ struct AIMusicSection: View {
         .sheet(isPresented: $showingTrackDetail) {
             if let track = selectedTrack {
                 TrackDetailView(track: track)
+                    .id(track.id)  // 确保track变化时视图正确重建
             }
         }
     }
@@ -333,8 +336,8 @@ struct AIMusicSection: View {
 struct AIMusicTrackRow: View {
     let track: MusicTrack
     let onTap: () -> Void
-    @StateObject private var audioPlayer = AudioPlayerService()
-    @StateObject private var storageService = MusicStorageService.shared
+    @State private var audioPlayer = AudioPlayerService()
+    @State private var storageService = MusicStorageService.shared
     
     var body: some View {
         Button(action: onTap) {
@@ -366,7 +369,8 @@ struct AIMusicTrackRow: View {
                     Text(track.title)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(Theme.textColor)
-                        .lineLimit(1)
+                        .lineLimit(2)  // 支持最多两行显示
+                        .fixedSize(horizontal: false, vertical: true)  // 允许垂直方向自适应
                     
                     // 风格和时间
                     HStack {
@@ -417,11 +421,14 @@ struct AIMusicTrackRow: View {
         if audioPlayer.isPlaying {
             audioPlayer.pause()
         } else {
-            // 确保使用最新的可播放URL
-            if let playableURL = storageService.getPlayableURL(for: track) {
-                audioPlayer.loadAudio(from: playableURL.absoluteString)
-                audioPlayer.play()
+            // 检查是否已经加载了正确的音频
+            if audioPlayer.duration == 0 {
+                // 如果还没有加载音频，则加载
+                if let playableURL = storageService.getPlayableURL(for: track) {
+                    audioPlayer.loadAudio(from: playableURL.absoluteString)
+                }
             }
+            audioPlayer.play()
         }
     }
     

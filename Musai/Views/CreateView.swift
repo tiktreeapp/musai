@@ -8,17 +8,27 @@
 import SwiftUI
 import PhotosUI
 import SwiftData
+import UIKit
 
 struct CreateView: View {
+    enum LyricsMode: String, CaseIterable {
+        case aiLyrics = "AI Lyrics"
+        case ownLyrics = "Own Lyrics"
+    }
+    
     @State private var selectedImage: UIImage?
     @State private var selectedImageItem: PhotosPickerItem?
     @State private var title = ""
-    @State private var lyrics = ""
+    @State private var aiLyrics = ""  // AI生成的歌词
+    @State private var ownLyrics = "" // 用户自己的歌词
     @State private var selectedStyle: MusicStyle = .pop
     @State private var selectedMode: MusicMode = .joyful
     @State private var selectedSpeed: MusicSpeed = .medium
-    @State private var selectedInstrumentation: MusicInstrumentation = .piano
+    @State private var selectedInstrumentation: MusicInstrumentation = .piano  // 恢复为单个选择
     @State private var selectedVocal: MusicVocal = .noLimit
+    @State private var lyricsMode: LyricsMode = .aiLyrics
+    @State private var isGeneratingLyrics = false
+    @State private var hasPastedLyrics = false // 标记是否已粘贴歌词
     
     
     @State private var showingGenerationResult = false
@@ -30,24 +40,35 @@ struct CreateView: View {
     @State private var isCreating = false
     
     
+    private var currentLyrics: String {
+        lyricsMode == .aiLyrics ? aiLyrics : ownLyrics
+    }
+    
     private var canCreate: Bool {
         let hasTitle = !title.isEmpty
-        let hasLyrics = !lyrics.isEmpty
+        let hasLyrics = !currentLyrics.isEmpty
         let hasImage = selectedImage != nil
         let notCreating = !isCreating
-        return hasTitle && hasLyrics && hasImage && notCreating
+        let notGeneratingLyrics = !isGeneratingLyrics
+        
+        // 在AI Lyrics模式下，即使没有歌词也可以创建（因为会自动生成）
+        let canCreateInCurrentMode = lyricsMode == .aiLyrics || hasLyrics
+        
+        return hasTitle && canCreateInCurrentMode && hasImage && notCreating && notGeneratingLyrics
     }
     
     private var createButtonParams: CreateButtonParams {
         CreateButtonParams(
             selectedImage: selectedImage,
             title: title,
-            lyrics: lyrics,
+            lyrics: currentLyrics,  // 使用当前模式的歌词
             selectedStyle: selectedStyle,
             selectedMode: selectedMode,
             selectedSpeed: selectedSpeed,
-            selectedInstrumentation: selectedInstrumentation,
+            selectedInstrumentation: selectedInstrumentation,  // 恢复为单个选择
             selectedVocal: selectedVocal,
+            lyricsMode: lyricsMode,
+            isGeneratingLyrics: isGeneratingLyrics,
             musicService: musicService,
             modelContext: modelContext,
             showingGenerationResult: $showingGenerationResult,
@@ -61,8 +82,10 @@ struct CreateView: View {
                 set: { title = $0 }
             ),
             lyricsBinding: Binding(
-                get: { lyrics },
-                set: { lyrics = $0 }
+                get: { 
+                    lyricsMode == .aiLyrics ? aiLyrics : ownLyrics
+                },
+                set: { _ in }  // 不允许直接修改currentLyrics
             ),
             selectedImageBinding: Binding(
                 get: { selectedImage },
@@ -78,7 +101,7 @@ struct CreateView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 18) {  // 减少Title到Upload a photo区域的距离24像素
                     // Image Upload Section
                     ImageUploadSection(
                         selectedImage: $selectedImage, 
@@ -90,7 +113,14 @@ struct CreateView: View {
                     TextInputSection(title: "Title", text: $title, placeholder: "Enter your music title")
                     
                     // Lyrics Input
-                    LyricsInputSection(lyrics: $lyrics)
+                    LyricsInputSection(
+                        aiLyrics: $aiLyrics,
+                        ownLyrics: $ownLyrics,
+                        lyricsMode: $lyricsMode,
+                        title: $title,
+                        isGeneratingLyrics: $isGeneratingLyrics,
+                        hasPastedLyrics: $hasPastedLyrics
+                    )
                     
                     // Options Section
                     OptionsSection(
@@ -103,9 +133,10 @@ struct CreateView: View {
                     
                     // Create Button
                     CreateButtonView(params: createButtonParams, isCreating: $isCreating)
+                        .padding(.bottom, 48)  // 增加到底部的距离48像素
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 20)
+                .padding(.horizontal, 0)  // 调整为与各元素相同的边距
+                .padding(.top, -4)  // 上移24像素 (20-24=-4)
             }
             .musaiBackground()
             .navigationTitle("Create")
@@ -125,7 +156,7 @@ struct CreateView: View {
                 GenerationResultView(
                     musicURL: imageURL,
                     title: title,
-                    lyrics: lyrics,
+                    lyrics: lyricsMode == .aiLyrics ? aiLyrics : ownLyrics,
                     style: selectedStyle,
                     mode: selectedMode,
                     coverImage: selectedImage
@@ -214,7 +245,7 @@ struct TextInputSection: View {
             TextField(placeholder, text: $text)
                 .textFieldStyle(CustomTextFieldStyle())
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 16)  // 调整为与按钮相同的边距
     }
 }
 
@@ -230,19 +261,102 @@ struct CustomTextFieldStyle: TextFieldStyle {
 }
 
 struct LyricsInputSection: View {
-    @Binding var lyrics: String
+    @Binding var aiLyrics: String
+    @Binding var ownLyrics: String
+    @Binding var lyricsMode: CreateView.LyricsMode
+    @Binding var title: String
+    @Binding var isGeneratingLyrics: Bool
+    @Binding var hasPastedLyrics: Bool
     @FocusState private var isFocused: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Lyrics")
-                .font(.headline)
-                .foregroundColor(Theme.textColor)
+            // 第一行: AI Lyrics 和 Own Lyrics 模式选择
+            HStack(spacing: 24) {
+                ForEach(CreateView.LyricsMode.allCases, id: \.self) { mode in
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            lyricsMode = mode
+                        }
+                    }) {
+                        Text(mode.rawValue)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(lyricsMode == mode ? Theme.primaryColor : Theme.secondaryTextColor)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(lyricsMode == mode ? Theme.primaryColor.opacity(0.1) : Color.clear)
+                            )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .frame(maxWidth: .infinity)
+            
+            // 第二行: Lyrics 标签和 Create/Paste/Clear 按钮
+            HStack {
+                Text("Lyrics")
+                    .font(.headline)
+                    .foregroundColor(Theme.textColor)
+                
+                Spacer()
+                
+                // 根据模式显示不同按钮
+                if lyricsMode == .aiLyrics {
+                    // AI Lyrics 模式 - Create 按钮
+                    Button(action: {
+                        generateAILyrics()
+                    }) {
+                        HStack {
+                            if isGeneratingLyrics {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: Theme.primaryColor))
+                                    .scaleEffect(0.5)
+                            }
+                            Text("Create")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundColor(Theme.primaryColor) // 绿色文本
+                        .padding(4) // 上下左右都为4像素
+                        .background(
+                            RoundedRectangle(cornerRadius: 16) // 保持16像素圆角
+                                .stroke(Theme.primaryColor, lineWidth: 1) // 绿色线框
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(title.isEmpty || isGeneratingLyrics)
+                } else { // Own Lyrics mode
+                    // Own Lyrics 模式 - Paste/Clear 按钮
+                    Button(action: {
+                        if hasPastedLyrics {
+                            // Clear 操作
+                            ownLyrics = ""
+                            hasPastedLyrics = false
+                        } else {
+                            // Paste 操作
+                            pasteLyrics()
+                        }
+                    }) {
+                        Text(hasPastedLyrics ? "Clear" : "Paste")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Theme.primaryColor) // 绿色文本
+                            .padding(4) // 上下左右都为4像素
+                            .background(
+                                RoundedRectangle(cornerRadius: 16) // 保持16像素圆角
+                                    .stroke(Theme.primaryColor, lineWidth: 1) // 绿色线框
+                            )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
             
             ZStack(alignment: .topLeading) {
-                // Placeholder text
-                if lyrics.isEmpty && !isFocused {
-                    Text("Input the lyrics with [intro][Verse][Chorus][Outro] tags")
+                // Placeholder text - 根据模式显示不同提示
+                if (lyricsMode == .aiLyrics ? aiLyrics : ownLyrics).isEmpty && !isFocused {
+                    Text(lyricsMode == .aiLyrics ? 
+                         "Enter a Title and 'Create' lyrics fit your title by AI" : 
+                         "Input the lyrics with [intro][Verse][Chorus][Outro] tags")
                         .font(.system(size: 16))
                         .foregroundColor(Theme.textColor.opacity(0.5))
                         .padding(16)
@@ -255,7 +369,7 @@ struct LyricsInputSection: View {
                             .fill(Theme.cardBackgroundColor)
                             .frame(height: 120)
                         
-                        TextEditor(text: $lyrics)
+                        TextEditor(text: lyricsMode == .aiLyrics ? $aiLyrics : $ownLyrics)
                             .frame(height: 120)
                             .padding(16)
                             .background(Color.clear)
@@ -268,7 +382,45 @@ struct LyricsInputSection: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 16)  // 调整为与按钮相同的边距
+    }
+    
+    
+    
+    private func generateAILyrics() {
+        // 调用阶跃星辰API生成歌词
+        print("Generating AI lyrics for title: \(title)")
+        isGeneratingLyrics = true
+        
+        Task {
+            do {
+                let lyricsService = StepfunLyricsService.shared
+                let generatedLyrics = try await lyricsService.generateLyrics(for: title)
+                await MainActor.run {
+                    self.aiLyrics = generatedLyrics
+                    self.isGeneratingLyrics = false
+                }
+            } catch {
+                print("❌ Error generating lyrics: \(error)")
+                await MainActor.run {
+                    self.isGeneratingLyrics = false
+                    // 如果API调用失败，使用默认提示
+                    self.aiLyrics = "[Verse]\nFailed to generate lyrics\n\n[Chorus]\nPlease try again"
+                }
+            }
+        }
+    }
+    
+    private func pasteLyrics() {
+        print("Pasting lyrics from clipboard")
+        // 从粘贴板获取内容
+        DispatchQueue.main.async {
+            let pasteboard = UIPasteboard.general
+            if let clipboardContent = pasteboard.string {
+                self.ownLyrics = clipboardContent.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.hasPastedLyrics = true
+            }
+        }
     }
 }
 
@@ -320,7 +472,7 @@ struct OptionsSection: View {
                 options: MusicVocal.allCases
             )
         }
-        .padding()
+        .padding(.horizontal, 16)  // 调整为与按钮相同的边距
     }
 }
 
@@ -367,8 +519,10 @@ struct CreateButtonParams {
     let selectedStyle: MusicStyle
     let selectedMode: MusicMode
     let selectedSpeed: MusicSpeed
-    let selectedInstrumentation: MusicInstrumentation
+    let selectedInstrumentation: MusicInstrumentation  // 恢复为单个选择
     let selectedVocal: MusicVocal
+    let lyricsMode: CreateView.LyricsMode
+    let isGeneratingLyrics: Bool
     let musicService: MusicGenerationService
     let modelContext: ModelContext
     @Binding var showingGenerationResult: Bool
@@ -388,8 +542,10 @@ struct CreateButtonParams {
         selectedStyle: MusicStyle,
         selectedMode: MusicMode,
         selectedSpeed: MusicSpeed,
-        selectedInstrumentation: MusicInstrumentation,
+        selectedInstrumentation: MusicInstrumentation,  // 恢复为单个选择
         selectedVocal: MusicVocal,
+        lyricsMode: CreateView.LyricsMode,
+        isGeneratingLyrics: Bool,
         musicService: MusicGenerationService,
         modelContext: ModelContext,
         showingGenerationResult: Binding<Bool>,
@@ -406,8 +562,10 @@ struct CreateButtonParams {
         self.selectedStyle = selectedStyle
         self.selectedMode = selectedMode
         self.selectedSpeed = selectedSpeed
-        self.selectedInstrumentation = selectedInstrumentation
+        self.selectedInstrumentation = selectedInstrumentation  // 恢复为单个选择
         self.selectedVocal = selectedVocal
+        self.lyricsMode = lyricsMode
+        self.isGeneratingLyrics = isGeneratingLyrics
         self.musicService = musicService
         self.modelContext = modelContext
         self._showingGenerationResult = showingGenerationResult
@@ -447,9 +605,14 @@ struct CreateButtonView: View {
         let hasLyrics = !lyrics.isEmpty
         let hasImage = selectedImage != nil
         let notCreating = !isCreating
-        let result = hasTitle && hasLyrics && hasImage && notCreating
+        let notGeneratingLyrics = !params.isGeneratingLyrics
         
-        print("🔍 CanCreate check: title=\(hasTitle), lyrics=\(hasLyrics), image=\(hasImage), notCreating=\(notCreating), result=\(result)")
+        // 在AI Lyrics模式下，即使没有歌词也可以创建（因为会自动生成）
+        let canCreateInCurrentMode = params.lyricsMode == .aiLyrics || hasLyrics
+        
+        let result = hasTitle && canCreateInCurrentMode && hasImage && notCreating && notGeneratingLyrics
+        
+        print("🔍 CanCreate check: title=\(hasTitle), lyrics=\(hasLyrics), image=\(hasImage), notCreating=\(notCreating), mode=\(params.lyricsMode), result=\(result)")
         return result
     }
     
@@ -467,26 +630,27 @@ struct CreateButtonView: View {
             HStack {
                 if isCreating {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: Theme.backgroundColor))
+                        .progressViewStyle(CircularProgressViewStyle(tint: Color.white))
                         .scaleEffect(0.8)
                     Text("Creating")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(Theme.backgroundColor)
+                        .foregroundColor(Color.white)
                         .padding(.leading, 8)
                 } else {
                     Text("Create")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(Theme.backgroundColor)
+                        .foregroundColor(Color.white)
                     
                     Image(systemName: "music.note")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(Theme.backgroundColor)
+                        .foregroundColor(Color.white)
                 }
             }
             .frame(maxWidth: .infinity)
             .frame(height: 56)
             .background(isCreating ? Theme.secondaryTextColor : (canCreate ? Theme.primaryColor : Theme.secondaryTextColor))
             .cornerRadius(28)
+            .padding(.horizontal, 65)  // 占据80%宽度 (左右各10%)
         }
         .disabled(!canCreate || isCreating)
         .buttonStyle(PlainButtonStyle())
@@ -495,22 +659,28 @@ struct CreateButtonView: View {
     
     private func createMusic() async {
         print("🎵 Starting music creation process")
-        isCreating = true
+        params.isCreatingBinding.wrappedValue = true
+        
+        // 如果是AI Lyrics模式且没有歌词，则先生成歌词
+        if params.lyricsMode == .aiLyrics && params.lyrics.isEmpty {
+            print("📝 Generating AI lyrics before music creation")
+            await generateAILyricsIfNeeded()
+        }
         
         do {
             // Generate music with backend API
             guard let image = params.selectedImage else {
                 print("❌ No image selected - cannot proceed")
-                isCreating = false
+                params.isCreatingBinding.wrappedValue = false
                 return
             }
             
             print("✓ Image validated: size=\(image.size)")
             
-            let prompt = "Create a song with title '\(params.title)' and lyrics: \(params.lyrics)"
+            let prompt = params.lyrics  // 仅使用歌词文本生成歌曲，不包含标题
             guard let imageData = image.jpegData(compressionQuality: 0.8) else {
                 print("❌ Failed to compress image")
-                isCreating = false
+                params.isCreatingBinding.wrappedValue = false
                 return
             }
             print("📝 Image compressed: \(imageData.count) bytes")
@@ -546,7 +716,7 @@ struct CreateButtonView: View {
             // Save to database
             guard let finalImageData = image.jpegData(compressionQuality: 0.8) else {
                 print("❌ Failed to compress image for database")
-                isCreating = false
+                params.isCreatingBinding.wrappedValue = false
                 return
             }
             // 验证音乐URL是否有效
@@ -601,8 +771,22 @@ struct CreateButtonView: View {
             }
         }
         
-        isCreating = false
+        params.isCreatingBinding.wrappedValue = false
         print("🏁 Music creation process completed")
+    }
+    
+    private func generateAILyricsIfNeeded() async {
+        // 模拟API调用
+        print("📝 Generating AI lyrics for title: \(params.title)")
+        
+        // 创建一个Promise来等待异步操作完成
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                // 示例歌词内容
+                params.lyricsBinding.wrappedValue = "[Verse]\nThis is an AI generated song\nBased on your title: \(params.title)\n\n[Chorus]\nMusic flows like magic\nAI creates what we imagine\n\n[Bridge]\nEvery note is crafted\nWith artificial intelligence\n\n[Outro]\nEnjoy your unique creation"
+                continuation.resume()
+            }
+        }
     }
     
     private func cacheMusicAfterGeneration(musicTrack: MusicTrack, musicURL: URL) async {

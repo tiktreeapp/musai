@@ -71,6 +71,7 @@ struct MyMusicsView: View {
         .sheet(isPresented: $showingTrackDetail) {
             if let track = selectedTrack {
                 TrackDetailView(track: track)
+                    .id(track.id)  // 确保track变化时视图正确重建
             }
         }
     }
@@ -292,7 +293,7 @@ struct TrackDetailView: View {
     let track: MusicTrack
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var audioPlayer = AudioPlayerService()
+    @State private var audioPlayer = AudioPlayerService()
     @State private var isPlaying = false
     @State private var isFavorite = false
     @State private var showingDeleteAlert = false
@@ -313,7 +314,7 @@ struct TrackDetailView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: geometry.size.width, height: geometry.size.height)
-                        .blur(radius: 30)
+                        .blur(radius: 15)  // 减少虚化程度到原来的一半
                         .opacity(0.6)
                 }
                 
@@ -347,15 +348,13 @@ struct TrackDetailView: View {
                         
                         // Player Section with adjusted position
                         VStack(spacing: 12) {
-                            if let audioURL = track.audioURL {
-                                TrackPlayerSection(
-                                    audioPlayer: audioPlayer,
-                                    audioURL: audioURL,
-                                    isFavorite: $isFavorite,
-                                    onShare: { shareTrack() },
-                                    onToggleFavorite: { toggleFavorite() }
-                                )
-                            }
+                            TrackPlayerSection(
+                                audioPlayer: audioPlayer,
+                                track: track,
+                                isFavorite: $isFavorite,
+                                onShare: { shareTrack() },
+                                onToggleFavorite: { toggleFavorite() }
+                            )
                         }
                         .padding(.top, 40)
                         
@@ -378,8 +377,6 @@ struct TrackDetailView: View {
                                 endPoint: .bottom
                             )
                         )
-                        
-                        
                     }
                 }
                 .ignoresSafeArea()
@@ -410,11 +407,21 @@ struct TrackDetailView: View {
             }
         }
         .onAppear {
-            if let audioURL = track.audioURL {
-                audioPlayer.loadAudio(from: audioURL)
+            // 重新初始化音频播放器以确保状态正确
+            audioPlayer = AudioPlayerService()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                let storageService = MusicStorageService.shared
+                // 使用storageService获取可播放的URL并加载音频
+                if let playableURL = storageService.getPlayableURL(for: track) {
+                    print("🎵 Loading audio from playable URL: \(playableURL.lastPathComponent)")
+                    audioPlayer.loadAudio(from: playableURL)
+                } else {
+                    print("❌ No playable URL available for track: \(track.title)")
+                }
+                isFavorite = track.isPlaying
+                startLyricSync()
             }
-            isFavorite = track.isPlaying
-            startLyricSync()
         }
         .onDisappear {
             audioPlayer.stop()
@@ -430,30 +437,84 @@ struct TrackDetailView: View {
     }
     
     private func parseLyrics(_ lyrics: String) -> [LyricLine] {
+        // 尝试解析LRC格式
+        if let lrcLyrics = parseLRCLyrics(lyrics) {
+            return lrcLyrics
+        }
+        
+        // 如果不是LRC格式，则使用默认解析方式
         let lines = lyrics.components(separatedBy: .newlines)
         var parsedLines: [LyricLine] = []
         
         for (index, line) in lines.enumerated() {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedLine.isEmpty {
+                // 估算时间戳，基于行索引
                 let timestamp = TimeInterval(index * 2)
-                parsedLines.append(LyricLine(text: trimmedLine, timestamp: timestamp))
+                parsedLines.append(LyricLine(time: timestamp, text: trimmedLine))
             }
         }
         
         return parsedLines
     }
     
+    private func parseLRCLyrics(_ lyrics: String) -> [LyricLine]? {
+        let pattern = #"\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)"# 
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+        
+        let lines = lyrics.components(separatedBy: .newlines)
+        var result: [LyricLine] = []
+        
+        for line in lines {
+            let nsLine = line as NSString
+            if let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) {
+                // 解析分钟、秒、毫秒
+                let minuteRange = match.range(at: 1)
+                let secondRange = match.range(at: 2)
+                let millisecondRange = match.range(at: 3)
+                let textRange = match.range(at: 4)
+                
+                if minuteRange.location != NSNotFound,
+                   secondRange.location != NSNotFound,
+                   millisecondRange.location != NSNotFound,
+                   textRange.location != NSNotFound {
+                    
+                    let minute = Double(nsLine.substring(with: minuteRange)) ?? 0
+                    let second = Double(nsLine.substring(with: secondRange)) ?? 0
+                    let millisecondStr = nsLine.substring(with: millisecondRange)
+                    let millisecondValue = Double(millisecondStr) ?? 0
+                    // 处理可能是两位或三位毫秒的情况
+                    let millisecond = millisecondStr.count > 2 ? millisecondValue / 1000 : millisecondValue / 100 // 两位数按百分秒处理
+                    
+                    let text = nsLine.substring(with: textRange).trimmingCharacters(in: .whitespaces)
+                    
+                    let time = minute * 60 + second + millisecond
+                    result.append(LyricLine(time: time, text: text))
+                }
+            }
+        }
+        
+        return result.isEmpty ? nil : result.sorted { $0.time < $1.time }
+    }
+    
     private func startLyricSync() {
-        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in  // 提高更新频率到每50ms
             let currentTime = audioPlayer.currentTime
             
+            // 查找当前时间对应的歌词行
+            var newIndex = currentLyricIndex
             for (index, lyric) in parsedLyrics.enumerated() {
-                if currentTime >= lyric.timestamp {
-                    if index != currentLyricIndex {
-                        currentLyricIndex = index
-                    }
+                if currentTime >= lyric.time {
+                    newIndex = index
+                } else {
+                    break  // 由于歌词是按时间排序的，找到第一个大于当前时间的歌词后就停止
                 }
+            }
+            
+            if newIndex != currentLyricIndex {
+                currentLyricIndex = newIndex
             }
             
             if !audioPlayer.isPlaying && currentTime >= audioPlayer.duration - 0.5 {
@@ -552,10 +613,11 @@ struct TrackCoverImageSection: View {
 
 struct TrackPlayerSection: View {
     @ObservedObject var audioPlayer: AudioPlayerService
-    let audioURL: String
+    let track: MusicTrack
     @Binding var isFavorite: Bool
     let onShare: () -> Void
     let onToggleFavorite: () -> Void
+    @StateObject private var storageService = MusicStorageService.shared
     
     var body: some View {
         VStack(spacing: 24) {
@@ -587,6 +649,8 @@ struct TrackPlayerSection: View {
                         step: 0.1
                     )
                     .accentColor(Theme.primaryColor)
+                    .scaleEffect(1.0)  // 添加缩放效果
+                    .frame(height: 20)  // 调整高度
                     
                     // Duration text
                     Text(formatTime(audioPlayer.duration))
@@ -619,12 +683,29 @@ struct TrackPlayerSection: View {
         }
         .padding(.horizontal, 32)
         .padding(.bottom, 32)
+        .onAppear {
+            // 使用storageService获取可播放的URL并加载音频
+            if let playableURL = storageService.getPlayableURL(for: track) {
+                print("🎵 Loading audio from playable URL: \(playableURL.lastPathComponent)")
+                audioPlayer.loadAudio(from: playableURL)
+            } else {
+                print("❌ No playable URL available for track: \(track.title)")
+            }
+        }
     }
     
     private func togglePlayPause() {
         if audioPlayer.isPlaying {
             audioPlayer.pause()
         } else {
+            // 检查是否已经加载了正确的音频
+            if audioPlayer.duration == 0 {
+                // 如果还没有加载音频，则加载
+                if let playableURL = storageService.getPlayableURL(for: track) {
+                    print("🎵 Loading audio from playable URL: \(playableURL.lastPathComponent)")
+                    audioPlayer.loadAudio(from: playableURL)
+                }
+            }
             audioPlayer.play()
         }
     }

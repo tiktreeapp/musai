@@ -59,7 +59,7 @@ class LyricsSyncService: ObservableObject {
         var newIndex = 0
         
         for (index, lyric) in lyrics.enumerated() {
-            if currentTime >= lyric.timestamp {
+            if currentTime >= lyric.time {
                 newIndex = index
             } else {
                 break
@@ -92,7 +92,7 @@ extension LyricsSyncService {
                 } else {
                     // Estimate timestamp based on line position (2 seconds per line as default)
                     let timestamp = TimeInterval(index * 2)
-                    parsedLines.append(LyricLine(text: trimmedLine, timestamp: timestamp))
+                    parsedLines.append(LyricLine(time: timestamp, text: trimmedLine))
                 }
             }
         }
@@ -121,17 +121,17 @@ extension LyricsSyncService {
         
         let timestamp = TimeInterval(minutes * 60 + seconds) + TimeInterval(centiseconds) / 100.0
         
-        return LyricLine(text: lyrics, timestamp: timestamp)
+        return LyricLine(time: timestamp, text: lyrics)
     }
     
     static func formatLyricsWithTimestamps(_ lyrics: [String]) -> String {
         var formattedLyrics = ""
         
         for (index, line) in lyrics.enumerated() {
-            let timestamp = TimeInterval(index * 2)
-            let minutes = Int(timestamp) / 60
-            let seconds = Int(timestamp) % 60
-            let centiseconds = Int((timestamp.truncatingRemainder(dividingBy: 1)) * 100)
+            let time = TimeInterval(index * 2)
+            let minutes = Int(time) / 60
+            let seconds = Int(time) % 60
+            let centiseconds = Int((time.truncatingRemainder(dividingBy: 1)) * 100)
             
             formattedLyrics += String(format: "[%02d:%02d.%02d]%@", minutes, seconds, centiseconds, line)
             formattedLyrics += "\n"
@@ -150,9 +150,9 @@ extension LyricsSyncService {
         
         var content = ""
         for lyric in lyrics {
-            let minutes = Int(lyric.timestamp) / 60
-            let seconds = Int(lyric.timestamp) % 60
-            let centiseconds = Int((lyric.timestamp.truncatingRemainder(dividingBy: 1)) * 100)
+            let minutes = Int(lyric.time) / 60
+            let seconds = Int(lyric.time) % 60
+            let centiseconds = Int((lyric.time.truncatingRemainder(dividingBy: 1)) * 100)
             content += String(format: "[%02d:%02d.%02d]%@", minutes, seconds, centiseconds, lyric.text)
             content += "\n"
         }
