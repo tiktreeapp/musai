@@ -238,6 +238,7 @@ struct SubscriptionView: View {
         
         if let product = subscriptionManager.products.first(where: { $0.id == productID }) {
             print("✅ Found product in list, proceeding with purchase")
+            
             Task {
                 await subscriptionManager.purchase(product)
             }

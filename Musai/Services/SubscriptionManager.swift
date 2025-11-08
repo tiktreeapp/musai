@@ -44,12 +44,21 @@ class SubscriptionManager: ObservableObject {
     }
     
     func fetchProducts() async {
+        print("🔍 Starting to fetch products...")
+        print("📱 Product IDs to fetch: \(weeklyProductID), \(monthlyProductID)")
+        
         do {
             let productIDs = [weeklyProductID, monthlyProductID]
             products = try await Product.products(for: productIDs)
             print("✅ Fetched \(products.count) products")
+            for product in products {
+                print("  - \(product.id): \(product.displayPrice)")
+            }
         } catch {
             print("❌ Failed to fetch products: \(error)")
+            if let storeKitError = error as? StoreKitError {
+                print("🔍 StoreKitError: \(storeKitError.localizedDescription)")
+            }
         }
     }
     
@@ -71,54 +80,42 @@ class SubscriptionManager: ObservableObject {
                     }
                     
                     print("✅ Purchase verified: \(transaction.productID)")
-                    isSubscribed = true
+                    await checkSubscriptionStatus()
                 } else {
                     print("⚠️ Transaction unverified")
                 }
             case .userCancelled:
                 print("⚠️ Purchase cancelled by user")
-            default:
-                print("⚠️ Unknown purchase result")
+                default:
+                    print("⚠️ Unknown purchase result")
             }
         } catch {
             print("❌ Purchase failed: \(error)")
         }
     }
     
+    
+    
     func checkSubscriptionStatus() async {
         var isActive = false
-        var subscriptionType = SubscriptionType.none
-        
-        // 用于跟踪最新的交易
-        var latestTransactionDate: Date?
-        var latestSubscriptionType: SubscriptionType = .none
+        var subscriptionType = SubscriptionType = .none
         
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
                transaction.productID.hasPrefix("com.tiktreeapp.musai.") {
                 isActive = true
-                
-                // 确定交易类型
-                let transactionType: SubscriptionType
                 if transaction.productID == weeklyProductID {
-                    transactionType = .weekly
-                } else if transaction.productID == monthlyProductID {
-                    transactionType = .monthly
-                } else {
-                    continue
+                    subscriptionType = .weekly
+                } else if product.id == monthlyProductID {
+                    subscriptionType = .monthly
                 }
-                
-                // 如果这是第一个交易或比之前的交易更新，则更新
-                if latestTransactionDate == nil || transaction.purchaseDate > latestTransactionDate! {
-                    latestTransactionDate = transaction.purchaseDate
-                    latestSubscriptionType = transactionType
-                }
+                break
             }
         }
         
         isSubscribed = isActive
         if isActive {
-            currentSubscriptionType = latestSubscriptionType
+            currentSubscriptionType = subscriptionType
         } else {
             currentSubscriptionType = .none
         }
