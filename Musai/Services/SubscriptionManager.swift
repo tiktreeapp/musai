@@ -98,7 +98,7 @@ class SubscriptionManager: ObservableObject {
     
     func checkSubscriptionStatus() async {
         var isActive = false
-        var subscriptionType = SubscriptionType = .none
+        var subscriptionType: SubscriptionType = .none
         
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
@@ -106,7 +106,7 @@ class SubscriptionManager: ObservableObject {
                 isActive = true
                 if transaction.productID == weeklyProductID {
                     subscriptionType = .weekly
-                } else if product.id == monthlyProductID {
+                } else if transaction.productID == monthlyProductID {
                     subscriptionType = .monthly
                 }
                 break
@@ -114,11 +114,7 @@ class SubscriptionManager: ObservableObject {
         }
         
         isSubscribed = isActive
-        if isActive {
-            currentSubscriptionType = subscriptionType
-        } else {
-            currentSubscriptionType = .none
-        }
+        currentSubscriptionType = subscriptionType
     }
     
     func restorePurchases() async {
