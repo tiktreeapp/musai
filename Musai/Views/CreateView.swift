@@ -715,13 +715,28 @@ struct CreateButtonView: View {
             return
         }
         
-        print("🎵 Starting music creation process")
+        print("🎵🎵🎵 STARTING MUSIC CREATION PROCESS 🎵🎵🎵")
+        print("📅 Start time: \(Date())")
+        print("📱 Device info: \(UIDevice.current.model) - iOS \(UIDevice.current.systemVersion)")
+        print("💎 Available diamonds: \(SubscriptionManager.shared.diamondCount)")
+        print("🎤 Title: \(params.title)")
+        print("🎤 Lyrics length: \(params.lyrics.count) characters")
+        print("🎤 Style: \(params.selectedStyle.rawValue)")
+        print("🎤 Mode: \(params.selectedMode.rawValue)")
+        print("🎤 Speed: \(params.selectedSpeed.rawValue)")
+        print("🎤 Instrumentation: \(params.selectedInstrumentation.rawValue)")
+        print("🎤 Vocal: \(params.selectedVocal.rawValue)")
+        print("🎤 Image present: \(params.selectedImage != nil)")
         params.isCreatingBinding.wrappedValue = true
+        
+        // 使用NSLog确保日志在所有环境中都能看到
+        NSLog("🎵 MUSIC CREATION STARTED - Title: \(params.title)")
         
         // 如果是AI Lyrics模式且没有歌词，则先生成歌词
         if params.lyricsMode == .aiLyrics && params.lyrics.isEmpty {
             print("📝 Generating AI lyrics before music creation")
             await generateAILyricsIfNeeded()
+            print("📝 AI lyrics generation completed")
         }
         
         do {
@@ -817,21 +832,43 @@ struct CreateButtonView: View {
                 print("✅ Navigation to result page triggered")
                 
                 // 使用钻石
+                print("💎💎💎 USING DIAMONDS FOR MUSIC CREATION 💎💎💎")
                 SubscriptionManager.shared.useDiamonds()
+                print("💎 Remaining diamonds: \(SubscriptionManager.shared.diamondCount)")
+                print("✅✅✅ MUSIC CREATION COMPLETED SUCCESSFULLY! ✅✅✅")
+                print("📅 Completion time: \(Date())")
+                NSLog("✅ MUSIC CREATION SUCCESS - Title: \(params.title)")
             } else {
-                print("❌ Music URL validation failed - status code: \((validateResponse as? HTTPURLResponse)?.statusCode ?? -1)")
+                print("❌ Music URL validation failed")
+                print("❌ Status code: \((validateResponse as? HTTPURLResponse)?.statusCode ?? -1)")
+                print("❌ Response size: \(validateData.count) bytes")
                 throw MusicGenerationError.invalidResponse
             }
             
         } catch {
             print("❌ Error creating music: \(error.localizedDescription)")
+            print("📅 Error time: \(Date())")
+            print("🔍 Error type: \(type(of: error))")
+            
             if let apiError = error as? MusicGenerationError {
                 print("🔍 API Error details: \(apiError.errorDescription ?? "Unknown error")")
+            }
+            
+            if let urlError = error as? URLError {
+                print("🔍 URLError details:")
+                print("  - Code: \(urlError.code.rawValue)")
+                print("  - Description: \(urlError.localizedDescription)")
+                print("  - Failing URL: \(urlError.failingURL?.absoluteString ?? "Unknown")")
+            }
+            
+            // 检查是否是任务取消错误
+            if error is CancellationError {
+                print("⚠️ Music generation was cancelled")
             }
         }
         
         params.isCreatingBinding.wrappedValue = false
-        print("🏁 Music creation process completed")
+        print("🏁 Music creation process completed at: \(Date())")
     }
     
     private func generateAILyricsIfNeeded() async {
