@@ -71,7 +71,7 @@ class SubscriptionManager: ObservableObject {
                     }
                     
                     print("✅ Purchase verified: \(transaction.productID)")
-                    await checkSubscriptionStatus()
+                    isSubscribed = true
                 } else {
                     print("⚠️ Transaction unverified")
                 }
@@ -89,22 +89,36 @@ class SubscriptionManager: ObservableObject {
         var isActive = false
         var subscriptionType = SubscriptionType.none
         
+        // 用于跟踪最新的交易
+        var latestTransactionDate: Date?
+        var latestSubscriptionType: SubscriptionType = .none
+        
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
                transaction.productID.hasPrefix("com.tiktreeapp.musai.") {
                 isActive = true
+                
+                // 确定交易类型
+                let transactionType: SubscriptionType
                 if transaction.productID == weeklyProductID {
-                    subscriptionType = .weekly
+                    transactionType = .weekly
                 } else if transaction.productID == monthlyProductID {
-                    subscriptionType = .monthly
+                    transactionType = .monthly
+                } else {
+                    continue
                 }
-                break
+                
+                // 如果这是第一个交易或比之前的交易更新，则更新
+                if latestTransactionDate == nil || transaction.purchaseDate > latestTransactionDate! {
+                    latestTransactionDate = transaction.purchaseDate
+                    latestSubscriptionType = transactionType
+                }
             }
         }
         
         isSubscribed = isActive
         if isActive {
-            currentSubscriptionType = subscriptionType
+            currentSubscriptionType = latestSubscriptionType
         } else {
             currentSubscriptionType = .none
         }

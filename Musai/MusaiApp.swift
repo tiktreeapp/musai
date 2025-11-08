@@ -25,9 +25,10 @@ struct MusaiApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
+            WelcomeView()
                 .preferredColorScheme(.dark)
                 .onAppear {
+                    print("🚀 Musai App started, showing WelcomeView")
                     // 初始化订阅管理器
                     SubscriptionManager.shared.loadDiamondCount()
                     // 获取订阅产品
