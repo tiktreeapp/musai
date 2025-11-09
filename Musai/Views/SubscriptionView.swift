@@ -235,17 +235,29 @@ struct SubscriptionView: View {
     private func purchaseSelectedPlan() {
         let productID = selectedPlan == .weekly ? "com.tiktreeapp.musai.weekly" : "com.tiktreeapp.musai.monthly"
         print("🛒 Attempting to purchase product: \(productID)")
+        print("📋 Total products loaded: \(subscriptionManager.products.count)")
+        print("📋 Available products: \(subscriptionManager.products.map { "\($0.id) - \($0.displayPrice)" })")
         
         if let product = subscriptionManager.products.first(where: { $0.id == productID }) {
             print("✅ Found product in list, proceeding with purchase")
+            print("📱 Product details: \(product.id) - \(product.displayPrice) - \(product.description)")
             
             Task {
                 await subscriptionManager.purchase(product)
             }
         } else {
             print("❌ Product not found in products list")
-            // Debug: Print all available products
-            print("📋 Available products: \(subscriptionManager.products.map { $0.id })")
+            print("🔍 Looking for ID: \(productID)")
+            print("🔍 Available IDs: \(subscriptionManager.products.map { $0.id })")
+            
+            // 尝试重新获取产品
+            Task {
+                print("🔄 Retrying to fetch products...")
+                await subscriptionManager.fetchProducts()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.purchaseSelectedPlan()
+                }
+            }
         }
     }
     

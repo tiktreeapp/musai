@@ -98,11 +98,11 @@ struct StorageManagementView: View {
             Button("Cancel", role: .cancel) { }
             Button("Cleanup", role: .destructive) {
                 Task {
-                    await storageService.cleanupLocalCache()
+                    await storageService.cleanupCorruptedCache()
                 }
             }
         } message: {
-            Text("This will remove old cached tracks except the 20 most recently played ones. Continue?")
+            Text("This will remove only corrupted cache files. Your music will remain safely cached.")
         }
     }
     

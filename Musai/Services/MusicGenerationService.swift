@@ -65,15 +65,35 @@ struct CloudinaryResponse: Codable {
 final class MusicGenerationService: ObservableObject {
     static let shared = MusicGenerationService()
     
-    init() {}
+    init() {
+        print("🎵 MusicGenerationService initialized!")
+        NSLog("MusicGenerationService initialized!")
+        
+        // Test backend health on initialization
+        Task {
+            await testBackendHealth()
+        }
+    }
+    
+    private func testBackendHealth() async {
+        do {
+            let url = URL(string: "\(backendURL)/health")
+            let (_, response) = try await URLSession.shared.data(from: url!)
+            if let httpResponse = response as? HTTPURLResponse {
+                print("🔍 Backend health check status: \(httpResponse.statusCode)")
+            }
+        } catch {
+            print("🔍 Backend health check failed: \(error)")
+        }
+    }
+    
+    private func logDebug(_ message: String) {
+        print("🔍 MusicGeneration: \(message)")
+        NSLog("MusicGeneration: \(message)")
+    }
     
     // MARK: - Properties
     private let backendURL = "https://musai-backend.onrender.com"
-    private let replicateAPIKey = ProcessInfo.processInfo.environment["REPLICATE_API_KEY"] ?? ""
-    private let cloudinaryCloudName = ProcessInfo.processInfo.environment["CLOUDINARY_CLOUD_NAME"] ?? ""
-    private let cloudinaryAPIKey = ProcessInfo.processInfo.environment["CLOUDINARY_API_KEY"] ?? ""
-    private let cloudinaryAPISecret = ProcessInfo.processInfo.environment["CLOUDINARY_API_SECRET"] ?? ""
-    private let cloudinaryUploadPreset = "musai_unsigned"
     
     // MARK: - ObservableObject
     @Published var isGenerating = false
@@ -91,6 +111,12 @@ final class MusicGenerationService: ObservableObject {
         imageData: Data? = nil
     ) async throws -> String {
         
+        print("=== MUSIC GENERATION START ===")
+        logDebug("Starting music generation")
+        print("🎵 Lyrics: \(prompt)")
+        logDebug("Parameters: style=\(style.rawValue), mode=\(mode.rawValue), speed=\(speed.rawValue)")
+        logDebug("Has image: \(imageData != nil)")
+        
         isGenerating = true
         generationProgress = 0.0
         errorMessage = nil
@@ -99,78 +125,178 @@ final class MusicGenerationService: ObservableObject {
             isGenerating = false
         }
         
-        // Construct the request body for Replicate API
+        // Construct the request body for backend API (Node.js SDK format)
         let requestBody: [String: Any] = [
-            "version": "5080f14bbbfd3da1cf1387fa8799ce3c24ae7c9f43c2b9f406657d2e70784446",
-            "input": [
-                "lyrics": prompt,
-                "prompt": "\(style.rawValue), \(mode.rawValue), \(instrumentation.rawValue)",
-                "bitrate": 256000,
-                "sample_rate": 44100,
-                "audio_format": "mp3"
-            ]
+            "lyrics": prompt,  // Node.js SDK expects lyrics field
+            "prompt": "\(style.rawValue), \(mode.rawValue), \(speed.rawValue), \(instrumentation.rawValue), \(vocal.rawValue)",  // Combined style parameters
+            "bitrate": 256000,
+            "sample_rate": 44100,
+            "audio_format": "mp3"
         ]
         
-        // Convert the request body to JSON data
+        // Image is only stored locally, not uploaded to backend
+        logDebug("Image will be stored locally only, not uploaded")
+        
+        // Create the request without image
         guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
+            logDebug("Failed to serialize request body")
             throw MusicGenerationError.invalidRequest
         }
         
-        // Create the URL request for Replicate API
-        guard let url = URL(string: "https://api.replicate.com/v1/predictions") else {
-            throw MusicGenerationError.invalidURL
+        // Log the request body for debugging
+        if let jsonString = String(data: jsonData, encoding: .utf8) {
+            logDebug("Request body: \(jsonString)")
         }
+        
+        // Create the URL request for backend API
+            let generateURL = "\(backendURL)/generate"
+            logDebug("Creating request to URL: \(generateURL)")
+            guard let url = URL(string: generateURL) else {
+                logDebug("Failed to create backend URL")
+                throw MusicGenerationError.invalidURL
+            }
+            
+            // Log the JSON that will be sent
+            if let jsonData = try? JSONSerialization.data(withJSONObject: requestBody, options: .prettyPrinted),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                logDebug("Request JSON that will be sent:")
+                logDebug(jsonString)
+                print("📤 Request JSON: \(jsonString)")
+            }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Token \(replicateAPIKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = jsonData
+        request.timeoutInterval = 120  // Set timeout to 120 seconds
         
-        // Send the request
-        let (data, response) = try await URLSession.shared.data(for: request)
+        logDebug("Sending request to backend without image")
+        
+        // Send the request with retry for 503 errors (backend hibernation)
+        var retryCount = 0
+        let maxRetries = 3
+        var data: Data
+        var response: URLResponse
+        
+        while true {
+            do {
+                (data, response) = try await URLSession.shared.data(for: request)
+                
+                // Check if we got a 503 response and should retry
+                if let httpResponse = response as? HTTPURLResponse,
+                   httpResponse.statusCode == 503,
+                   retryCount < maxRetries {
+                    retryCount += 1
+                    logDebug("Backend is hibernating (503), retrying... Attempt \(retryCount)/\(maxRetries)")
+                    // Wait 10 seconds before retry
+                    try await Task.sleep(nanoseconds: 10_000_000_000)
+                    continue
+                }
+                break
+            } catch {
+                // For network errors, also retry
+                if retryCount < maxRetries {
+                    retryCount += 1
+                    logDebug("Network error, retrying... Attempt \(retryCount)/\(maxRetries)")
+                    try await Task.sleep(nanoseconds: 10_000_000_000)
+                    continue
+                }
+                throw error
+            }
+        }
         
         // Check the response status code
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MusicGenerationError.invalidResponse
         }
         
+        logDebug("Backend response status: \(httpResponse.statusCode)")
+        
+        // Log response body for debugging BEFORE checking status code
+        print("=== BACKEND RESPONSE DEBUG ===")
+        print("Status code: \(httpResponse.statusCode)")
+        print("Raw response data size: \(data.count) bytes")
+        
+        if data.count > 0 {
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("Response body (UTF-8): \(responseString)")
+                logDebug("Backend response body: \(responseString)")
+            } else {
+                print("Response body is not valid UTF-8")
+                // Try to print first 100 bytes as hex
+                let bytesToPrint = min(100, data.count)
+                let hexString = data.prefix(bytesToPrint).map { String(format: "%02x", $0) }.joined()
+                print("Response hex (first \(bytesToPrint) bytes): \(hexString)")
+            }
+        } else {
+            print("Response body is empty!")
+        }
+        print("=== END DEBUG ===")
+        
         // Handle different status codes
         switch httpResponse.statusCode {
         case 200, 201:
             // Success, continue processing
-            break
+            logDebug("Backend request successful")
+            
+            // Decode the response
+            do {
+                let backendResponse = try JSONDecoder().decode(BackendResponse.self, from: data)
+                logDebug("Received prediction ID: \(backendResponse.predictionId)")
+                
+                // Return the prediction ID
+                return backendResponse.predictionId
+            } catch {
+                logDebug("Failed to decode backend response as BackendResponse: \(error)")
+                
+                // Try to decode as generic error response
+                if let errorDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    logDebug("Error response details: \(errorDict)")
+                    print("🔍 Error response details: \(errorDict)")
+                }
+                
+                throw MusicGenerationError.invalidResponse
+            }
         case 400:
+            logDebug("Backend error: Bad request (400)")
+            // Also log error response details for 400
+            if let errorDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                logDebug("Error response details: \(errorDict)")
+                print("🔍 400 Error response details: \(errorDict)")
+            }
             throw MusicGenerationError.invalidRequest
         case 401:
+            logDebug("Backend error: Unauthorized (401)")
             throw MusicGenerationError.invalidAPIKey
         case 429:
+            logDebug("Backend error: Rate limit exceeded (429)")
             throw MusicGenerationError.rateLimitExceeded
         case 500...599:
+            logDebug("Backend error: Server error (\(httpResponse.statusCode))")
             throw MusicGenerationError.serverError(httpResponse.statusCode)
         default:
+            logDebug("Backend error: Unknown status code (\(httpResponse.statusCode))")
             throw MusicGenerationError.invalidResponse
         }
         
-        // Decode the response
-        let replicateResponse = try JSONDecoder().decode(ReplicateResponse.self, from: data)
         
-        // Return the prediction ID
-        return replicateResponse.id
     }
     
     func getMusicURL(for predictionId: String) async throws -> URL {
-        // Create the URL for checking the prediction status via Replicate API
-        guard let url = URL(string: "https://api.replicate.com/v1/predictions/\(predictionId)") else {
+        // Create the URL for checking the prediction status via backend API
+        guard let url = URL(string: "\(backendURL)/status/\(predictionId)") else {
             throw MusicGenerationError.invalidURL
         }
         
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Token \(replicateAPIKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 30  // Set timeout for status check
         
         // Poll the API until the prediction is complete
-        while true {
+        var pollCount = 0
+        let maxPolls = 60  // Maximum 60 polls (2 minutes)
+        
+        while pollCount < maxPolls {
             let (data, response) = try await URLSession.shared.data(for: request)
             
             // Check the response status code
@@ -196,77 +322,50 @@ final class MusicGenerationService: ObservableObject {
             }
             
             // Decode the response
-            let replicateResponse = try JSONDecoder().decode(ReplicateResponse.self, from: data)
+            let backendResponse = try JSONDecoder().decode(BackendStatusResponse.self, from: data)
             
             // Check if the prediction is complete
-            if replicateResponse.status == "succeeded", let urlString = replicateResponse.musicURL {
-                // Return the URL of the generated music
-                guard let musicURL = URL(string: urlString) else {
+            if backendResponse.status == "succeeded" {
+                if let urlString = backendResponse.musicURL {
+                    // If URL is relative, prepend backend URL
+                    let fullURLString = urlString.hasPrefix("http") ? urlString : "\(backendURL)\(urlString)"
+                    if let musicURL = URL(string: fullURLString) {
+                        return musicURL
+                    } else {
+                        print("⚠️ Music generation succeeded but invalid musicURL: \(fullURLString)")
+                        throw MusicGenerationError.invalidMusicURL
+                    }
+                } else {
+                    print("⚠️ Music generation succeeded but no musicURL returned — stopping polling.")
                     throw MusicGenerationError.invalidMusicURL
                 }
-                
-                return musicURL
-            } else if replicateResponse.status == "failed" {
+            } else if backendResponse.status == "failed" {
                 // Throw an error if the prediction failed
-                let errorMessage = replicateResponse.error ?? "Unknown error"
+                let errorMessage = backendResponse.error ?? "Unknown error"
                 throw MusicGenerationError.predictionFailed(errorMessage)
             } else {
-                // Log the current status and wait before polling again
-                print("⏳ Music generation status: \(replicateResponse.status)")
+                // Log the current status every 10 seconds (reduce noise)
+                if pollCount % 5 == 0 {
+                    print("⏳ Music generation status: \(backendResponse.status)")
+                }
                 generationProgress = min(0.9, generationProgress + 0.1)
+                pollCount += 1
                 // Wait for 2 seconds before polling again
                 try await Task.sleep(nanoseconds: 2_000_000_000)
             }
         }
+        
+        // If we reach here, we've exceeded the maximum number of polls
+        throw MusicGenerationError.predictionFailed("Music generation timed out after \(maxPolls) attempts")
     }
     
-    private func uploadImageToCloudinary(imageData: Data) async throws -> String {
-        // Create the URL for Cloudinary upload
-        guard let url = URL(string: "https://api.cloudinary.com/v1_1/\(cloudinaryCloudName)/image/upload") else {
-            throw MusicGenerationError.invalidURL
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        
-        // Create multipart form data
-        let boundary = UUID().uuidString
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        
-        var body = Data()
-        
-        // Add upload preset
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"upload_preset\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(cloudinaryUploadPreset)\r\n".data(using: .utf8)!)
-        
-        // Add image data
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(imageData)
-        body.append("\r\n".data(using: .utf8)!)
-        
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        
-        request.httpBody = body
-        
-        // Send the request with timeout
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        // Check the response status code
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MusicGenerationError.invalidResponse
-        }
-        
-        guard httpResponse.statusCode == 200 else {
-            throw MusicGenerationError.serverError(httpResponse.statusCode)
-        }
-        
-        // Decode the response
-        let cloudinaryResponse = try JSONDecoder().decode(CloudinaryResponse.self, from: data)
-        return cloudinaryResponse.secure_url
-    }
+    // MARK: - Image upload is no longer needed for music generation
+// Images are stored locally only
+/*
+private func uploadImageToBackend(imageData: Data) async throws -> String {
+    // This method is no longer used - images are stored locally only
+}
+*/
 }
 
 // MARK: - Error Types

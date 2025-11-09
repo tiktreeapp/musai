@@ -13,11 +13,8 @@ import Combine
 final class MusicStorageService: ObservableObject {
     static let shared = MusicStorageService()
     
-    // Cloudinary配置
-    private let cloudinaryCloudName = "dygx9d3gi"
-    private let cloudinaryAPIKey = "771822174588294"
-    private let cloudinaryAPISecret = "r_eWr4nK5jdpK5yWRNVkL7i6wY4"
-    private let uploadPreset = "musai_unsigned"
+    // 后端URL配置
+    private let backendURL = "https://musai-backend.onrender.com"
     
     // 本地缓存管理
     private let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
@@ -56,7 +53,7 @@ final class MusicStorageService: ObservableObject {
         return localURL
     }
     
-    /// 上传音乐到Cloudinary（后台任务）
+    /// 上传音乐到云端（通过后端）
     func uploadMusicToCloudinary(musicTrack: MusicTrack) async throws -> String {
         guard let localPath = musicTrack.localFilePath,
               let localURL = URL(string: "file://" + localPath) else {
@@ -74,10 +71,10 @@ final class MusicStorageService: ObservableObject {
             }
         }
         
-        // 使用原生API上传到Cloudinary
-        let cloudinaryURL = "https://api.cloudinary.com/v1_1/\(cloudinaryCloudName)/video/upload"
+        // 使用后端API上传音乐
+        let uploadURL = "\(backendURL)/upload/music"
         
-        guard let url = URL(string: cloudinaryURL) else {
+        guard let url = URL(string: uploadURL) else {
             throw StorageError.uploadFailed
         }
         
@@ -90,19 +87,9 @@ final class MusicStorageService: ObservableObject {
         
         var body = Data()
         
-        // 添加upload preset
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"upload_preset\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(uploadPreset)\r\n".data(using: .utf8)!)
-        
-        // 添加文件夹
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"folder\"\r\n\r\n".data(using: .utf8)!)
-        body.append("musai_tracks/\(musicTrack.id.uuidString)\r\n".data(using: .utf8)!)
-        
         // 添加文件
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(musicTrack.title).mp3\"\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"music\"; filename=\"\(musicTrack.title).mp3\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: audio/mpeg\r\n\r\n".data(using: .utf8)!)
         
         let fileData = try Data(contentsOf: localURL)
@@ -118,7 +105,7 @@ final class MusicStorageService: ObservableObject {
         if let httpResponse = response as? HTTPURLResponse,
            httpResponse.statusCode == 200,
            let responseData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let secureURL = responseData["secure_url"] as? String {
+           let secureURL = responseData["url"] as? String {
             
             // 更新数据库中的云端URL
             musicTrack.cloudinaryURL = secureURL
@@ -140,52 +127,112 @@ final class MusicStorageService: ObservableObject {
     func getPlayableURL(for musicTrack: MusicTrack) -> URL? {
         // 优先使用本地缓存
         if let localPath = musicTrack.localFilePath,
-           let localURL = URL(string: "file://" + localPath),
            FileManager.default.fileExists(atPath: localPath) {
+            let localURL = URL(fileURLWithPath: localPath)
+            print("🎵 Using local cached file: \(localURL.lastPathComponent)")
             return localURL
         }
         
-        // 使用云端URL
-        if let cloudinaryURL = musicTrack.cloudinaryURL {
-            return URL(string: cloudinaryURL)
+        // 如果本地文件不存在，尝试从云端恢复
+        if let cloudinaryURL = musicTrack.cloudinaryURL,
+           let cloudURL = URL(string: cloudinaryURL) {
+            print("🌐 Local file not found, attempting to restore from cloud...")
+            // 异步恢复本地缓存
+            Task {
+                do {
+                    _ = try await restoreFromCloud(cloudURL: cloudURL, musicTrack: musicTrack)
+                    print("✅ Successfully restored local cache from cloud")
+                } catch {
+                    print("❌ Failed to restore from cloud: \(error)")
+                }
+            }
+            return cloudURL
         }
         
-        // 使用原始URL（可能已过期）
+        // 最后尝试原始URL（可能已过期）
         if let originalURL = musicTrack.audioURL,
            let url = URL(string: originalURL) {
+            print("⚠️ Using potentially expired original URL")
             return url
         }
         
+        print("❌ No playable URL available")
         return nil
     }
     
-    /// 清理本地缓存（保留最近播放的）
-    func cleanupLocalCache(keepRecent count: Int = 20) async {
+    /// 从云端恢复本地缓存
+    private func restoreFromCloud(cloudURL: URL, musicTrack: MusicTrack) async throws -> URL {
+        let trackID = musicTrack.id.uuidString
+        let localURL = musicCacheDirectory.appendingPathComponent("\(trackID).mp3")
+        
+        // 下载音乐文件
+        let (data, _) = try await URLSession.shared.data(from: cloudURL)
+        try data.write(to: localURL)
+        
+        // 更新数据库中的本地路径
+        musicTrack.localFilePath = localURL.path
+        musicTrack.isCachedLocally = true
+        
+        print("📥 Restored local cache: \(localURL.lastPathComponent)")
+        return localURL
+    }
+    
+    /// 清理损坏的缓存文件（保留所有有效文件）
+    func cleanupCorruptedCache() async {
         do {
             let files = try FileManager.default.contentsOfDirectory(
                 at: musicCacheDirectory,
-                includingPropertiesForKeys: [.creationDateKey, .fileSizeKey],
+                includingPropertiesForKeys: [.fileSizeKey],
                 options: [.skipsHiddenFiles]
             )
             
-            // 按创建时间排序，删除旧的文件
-            let sortedFiles = files.sorted { url1, url2 in
-                let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-                let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-                return date1 > date2
+            var filesToDelete: [URL] = []
+            
+            for file in files {
+                // 检查文件是否损坏
+                if let fileSize = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+                   fileSize < 1024 { // 小于1KB的文件可能是损坏的
+                    filesToDelete.append(file)
+                }
             }
             
-            // 保留最近的count个文件
-            let filesToDelete = Array(sortedFiles.dropFirst(count))
-            
+            // 删除损坏的文件
             for file in filesToDelete {
                 try FileManager.default.removeItem(at: file)
+                print("🗑️ Removed corrupted cache file: \(file.lastPathComponent)")
             }
             
             await updateStorageStats()
             
         } catch {
             print("❌ Cache cleanup failed: \(error)")
+        }
+    }
+    
+    /// 验证所有本地缓存文件的有效性
+    func validateCacheFiles() async -> Int {
+        do {
+            let files = try FileManager.default.contentsOfDirectory(
+                at: musicCacheDirectory,
+                includingPropertiesForKeys: [.fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )
+            
+            var validCount = 0
+            
+            for file in files {
+                if let fileSize = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+                   fileSize >= 1024 { // 大于1KB认为是有效文件
+                    validCount += 1
+                }
+            }
+            
+            print("📊 Cache validation: \(validCount)/\(files.count) files are valid")
+            return validCount
+            
+        } catch {
+            print("❌ Cache validation failed: \(error)")
+            return 0
         }
     }
     

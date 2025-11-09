@@ -10,11 +10,17 @@ import PhotosUI
 import SwiftData
 import UIKit
 import StoreKit
+import Photos
 
 struct CreateView: View {
     enum LyricsMode: String, CaseIterable {
         case aiLyrics = "AI Lyrics"
         case ownLyrics = "Own Lyrics"
+    }
+    
+    init() {
+        print("🚀 CreateView initialized!")
+        NSLog("CreateView initialized!")
     }
     
     @State private var selectedImage: UIImage?
@@ -188,13 +194,16 @@ struct CreateView: View {
         .sheet(isPresented: $showingSubscription) {
             SubscriptionView()
         }
-        
+        .onAppear {
+            // 请求相册访问权限
+            requestPhotoLibraryPermission()
+        }
     }
     
     private func compressAndResizeImage(_ image: UIImage, targetSize: CGSize) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: targetSize)
         
-        return renderer.image { _ in
+        let resizedImage = renderer.image { _ in
             // Calculate aspect ratio
             let aspectRatio = image.size.width / image.size.height
             let targetAspectRatio = targetSize.width / targetSize.height
@@ -212,6 +221,88 @@ struct CreateView: View {
             }
             
             image.draw(in: drawRect)
+        }
+        
+        // 进一步压缩到100KB左右
+        return compressImageToTargetSize(resizedImage, targetSizeInBytes: 100 * 1024)
+    }
+    
+    private func compressImageToTargetSize(_ image: UIImage, targetSizeInBytes: Int) -> UIImage {
+        var compression: CGFloat = 1.0
+        var imageData = image.jpegData(compressionQuality: compression)
+        
+        // 如果原始图片已经小于目标大小，直接返回
+        if imageData!.count <= targetSizeInBytes {
+            return image
+        }
+        
+        // 二分法查找最佳压缩比例
+        var min: CGFloat = 0.0
+        var max: CGFloat = 1.0
+        var lastData: Data?
+        
+        while max - min > 0.01 {
+            compression = (min + max) / 2
+            imageData = image.jpegData(compressionQuality: compression)
+            
+            if let data = imageData {
+                if data.count < targetSizeInBytes {
+                    lastData = data
+                    min = compression
+                } else {
+                    max = compression
+                }
+            }
+        }
+        
+        // 如果找到合适的压缩比例，返回压缩后的图片
+        if let finalData = lastData, finalData.count <= targetSizeInBytes,
+           let compressedImage = UIImage(data: finalData) {
+            // print("📷 Image compressed to \(finalData.count) bytes (target: \(targetSizeInBytes) bytes)") // Reduce noise
+            return compressedImage
+        }
+        
+        // 如果压缩失败，使用最低质量
+        if let lowestQualityData = image.jpegData(compressionQuality: 0.1),
+           let lowestQualityImage = UIImage(data: lowestQualityData) {
+            // print("📷 Image compressed to lowest quality: \(lowestQualityData.count) bytes") // Reduce noise
+            return lowestQualityImage
+        }
+        
+        // 最后的备选方案
+        return image
+    }
+    
+    private func requestPhotoLibraryPermission() {
+        let status = PHPhotoLibrary.authorizationStatus()
+        
+        switch status {
+        case .authorized:
+            print("✅ Photo library access already authorized")
+        case .limited:
+            print("✅ Photo library access limited")
+        case .denied, .restricted:
+            print("⚠️ Photo library access denied or restricted")
+        case .notDetermined:
+            print("📝 Requesting photo library access...")
+            PHPhotoLibrary.requestAuthorization { status in
+                DispatchQueue.main.async {
+                    switch status {
+                    case .authorized:
+                        print("✅ Photo library access granted")
+                    case .limited:
+                        print("✅ Photo library access limited")
+                    case .denied, .restricted:
+                        print("❌ Photo library access denied or restricted")
+                    case .notDetermined:
+                        print("⚠️ Photo library access not determined")
+                    @unknown default:
+                        print("⚠️ Unknown photo library access status")
+                    }
+                }
+            }
+        @unknown default:
+            print("⚠️ Unknown photo library access status")
         }
     }
 }
@@ -641,9 +732,14 @@ struct CreateButtonView: View {
         // 在AI Lyrics模式下，即使没有歌词也可以创建（因为会自动生成）
         let canCreateInCurrentMode = params.lyricsMode == .aiLyrics || hasLyrics
         
+        // 不再检查钻石数量，在点击时再检查
         let result = hasTitle && canCreateInCurrentMode && hasImage && notCreating && notGeneratingLyrics
         
-        print("🔍 CanCreate check: title=\(hasTitle), lyrics=\(hasLyrics), image=\(hasImage), notCreating=\(notCreating), mode=\(params.lyricsMode), result=\(result)")
+        // 完全移除 CanCreate 日志（减少噪音）
+        #if DEBUG
+        // CanCreate logs removed to reduce noise
+        #endif
+        
         return result
     }
     
@@ -651,6 +747,10 @@ struct CreateButtonView: View {
     
     var body: some View {
         Button(action: {
+            NSLog("🔘 Create button tapped!")
+            NSLog("  - Can create: \(canCreate)")
+            NSLog("  - Is creating: \(isCreating)")
+            
             // Dismiss keyboard
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             
@@ -680,7 +780,7 @@ struct CreateButtonView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
-                .background(isCreating ? Theme.secondaryTextColor : (canCreate ? Theme.primaryColor : Theme.secondaryTextColor))
+                .background(isCreating ? Theme.secondaryTextColor : Theme.primaryColor)
                 .cornerRadius(28)
                 .padding(.horizontal, 65)  // 占据80%宽度 (左右各10%)
                 
@@ -702,7 +802,7 @@ struct CreateButtonView: View {
         }
         .disabled(!canCreate || isCreating)
         .buttonStyle(PlainButtonStyle())
-        .opacity(canCreate ? 1.0 : 0.6)
+        .opacity(1.0)
     }
     
     private func createMusic() async {
@@ -785,65 +885,45 @@ struct CreateButtonView: View {
             let musicURL = try await params.musicService.getMusicURL(for: predictionId)
             print("✅ Music URL received: \(musicURL)")
             
-            // Save to database
-            guard let finalImageData = image.jpegData(compressionQuality: 0.8) else {
-                print("❌ Failed to compress image for database")
-                params.isCreatingBinding.wrappedValue = false
-                return
-            }
-            // 验证音乐URL是否有效
-            print("🔍 Validating music URL...")
-            let (validateData, validateResponse) = try await URLSession.shared.data(from: musicURL)
+            // 立即跳转到播放页面
+            params.generatedMusicURL = musicURL.absoluteString
+            params.showingGenerationResult = true
+            print("✅ Navigation to result page triggered immediately")
             
-            if let httpResponse = validateResponse as? HTTPURLResponse,
-               httpResponse.statusCode == 200,
-               !validateData.isEmpty {
-                print("✅ Music URL validation successful")
-                
-                // 创建音乐记录
-                print("🎵 Creating music track record...")
-                let musicTrack = MusicTrack(
-                    title: params.title,
-                    lyrics: params.lyrics,
-                    style: params.selectedStyle,
-                    mode: params.selectedMode,
-                    speed: params.selectedSpeed,
-                    instrumentation: params.selectedInstrumentation,
-                    vocal: params.selectedVocal,
-                    imageData: finalImageData
+            // 使用钻石
+            print("💎💎💎 USING DIAMONDS FOR MUSIC CREATION 💎💎💎")
+            SubscriptionManager.shared.useDiamonds()
+            print("💎 Remaining diamonds: \(SubscriptionManager.shared.diamondCount)")
+            
+            // 在后台保存和缓存音乐
+            let title = params.title
+            let lyrics = params.lyrics
+            let selectedStyle = params.selectedStyle
+            let selectedMode = params.selectedMode
+            let selectedSpeed = params.selectedSpeed
+            let selectedInstrumentation = params.selectedInstrumentation
+            let selectedVocal = params.selectedVocal
+            let modelContextRef = params.modelContext
+            
+            Task.detached {
+                await self.saveAndCacheMusicInBackground(
+                    title: title,
+                    lyrics: lyrics,
+                    style: selectedStyle,
+                    mode: selectedMode,
+                    speed: selectedSpeed,
+                    instrumentation: selectedInstrumentation,
+                    vocal: selectedVocal,
+                    image: image,
+                    musicURL: musicURL,
+                    modelContext: modelContextRef
                 )
-                musicTrack.audioURL = musicURL.absoluteString
-                
-                print("💾 Saving to database...")
-                params.modelContext.insert(musicTrack)
-                try params.modelContext.save()
-                print("✅ Saved to database successfully")
-                
-                // 同步缓存音乐到本地和云端
-                print("💾 Caching music locally and to cloud...")
-                await cacheMusicAfterGeneration(musicTrack: musicTrack, musicURL: musicURL)
-                
-                // Wait 3 seconds then show result
-                print("⏳ Waiting 3 seconds before showing result...")
-                try await Task.sleep(nanoseconds: 3_000_000_000)
-                
-                params.generatedMusicURL = musicURL.absoluteString
-                params.showingGenerationResult = true
-                print("✅ Navigation to result page triggered")
-                
-                // 使用钻石
-                print("💎💎💎 USING DIAMONDS FOR MUSIC CREATION 💎💎💎")
-                SubscriptionManager.shared.useDiamonds()
-                print("💎 Remaining diamonds: \(SubscriptionManager.shared.diamondCount)")
-                print("✅✅✅ MUSIC CREATION COMPLETED SUCCESSFULLY! ✅✅✅")
-                print("📅 Completion time: \(Date())")
-                NSLog("✅ MUSIC CREATION SUCCESS - Title: \(params.title)")
-            } else {
-                print("❌ Music URL validation failed")
-                print("❌ Status code: \((validateResponse as? HTTPURLResponse)?.statusCode ?? -1)")
-                print("❌ Response size: \(validateData.count) bytes")
-                throw MusicGenerationError.invalidResponse
             }
+            
+            params.isCreatingBinding.wrappedValue = false
+            print("✅✅✅ MUSIC CREATION COMPLETED SUCCESSFULLY! ✅✅✅")
+            print("📅 Completion time: \(Date())")
+            NSLog("✅ MUSIC CREATION SUCCESS - Title: \(params.title)")
             
         } catch {
             print("❌ Error creating music: \(error.localizedDescription)")
@@ -865,10 +945,87 @@ struct CreateButtonView: View {
             if error is CancellationError {
                 print("⚠️ Music generation was cancelled")
             }
+            
+            // 打印完整的错误堆栈
+            print("🔍 Full error: \(error)")
         }
         
         params.isCreatingBinding.wrappedValue = false
         print("🏁 Music creation process completed at: \(Date())")
+    }
+    
+    // 后台保存和缓存音乐
+    private func saveAndCacheMusicInBackground(
+        title: String,
+        lyrics: String,
+        style: MusicStyle,
+        mode: MusicMode,
+        speed: MusicSpeed,
+        instrumentation: MusicInstrumentation,
+        vocal: MusicVocal,
+        image: UIImage,
+        musicURL: URL,
+        modelContext: ModelContext?
+    ) async {
+        guard let modelContext = modelContext else { return }
+        
+        await MainActor.run {
+            print("🎵 Background: Starting save and cache process")
+        }
+        
+        do {
+            // 压缩图片
+            guard let finalImageData = image.jpegData(compressionQuality: 0.8) else {
+                await MainActor.run {
+                    print("❌ Background: Failed to compress image")
+                }
+                return
+            }
+            
+            // 创建音乐记录
+            await MainActor.run {
+                print("🎵 Background: Creating music track record...")
+            }
+            
+            let musicTrack = MusicTrack(
+                title: title,
+                lyrics: lyrics,
+                style: style,
+                mode: mode,
+                speed: speed,
+                instrumentation: instrumentation,
+                vocal: vocal,
+                imageData: finalImageData
+            )
+            musicTrack.audioURL = musicURL.absoluteString
+            
+            // 保存到数据库
+            await MainActor.run {
+                print("💾 Background: Saving to database...")
+                modelContext.insert(musicTrack)
+                do {
+                    try modelContext.save()
+                    print("✅ Background: Saved to database successfully")
+                } catch {
+                    print("❌ Background: Failed to save to database: \(error)")
+                }
+            }
+            
+            // 缓存音乐到本地和云端
+            await MainActor.run {
+                print("💾 Background: Caching music locally and to cloud...")
+            }
+            await cacheMusicAfterGeneration(musicTrack: musicTrack, musicURL: musicURL)
+            
+            await MainActor.run {
+                print("✅ Background: Save and cache process completed")
+            }
+            
+        } catch {
+            await MainActor.run {
+                print("❌ Background: Error in save and cache process: \(error)")
+            }
+        }
     }
     
     private func generateAILyricsIfNeeded() async {
