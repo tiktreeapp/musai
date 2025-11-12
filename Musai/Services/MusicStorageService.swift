@@ -17,7 +17,6 @@ final class MusicStorageService: ObservableObject {
     private let backendURL = "https://musai-backend.onrender.com"
     
     // 本地缓存管理
-    private let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
     private let musicCacheDirectory: URL
     
     @Published var isUploading = false
@@ -31,9 +30,11 @@ final class MusicStorageService: ObservableObject {
     }
     
     private init() {
-        // 创建本地缓存目录
-        musicCacheDirectory = documentsDirectory.appendingPathComponent("MusicCache")
+        // 使用固定的缓存路径，不依赖应用的Documents目录
+        let cachesDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        musicCacheDirectory = cachesDirectory.appendingPathComponent("Musai/MusicCache")
         try? FileManager.default.createDirectory(at: musicCacheDirectory, withIntermediateDirectories: true)
+        print("📁 Music cache directory: \(musicCacheDirectory.path)")
     }
     
     /// 保存音乐到本地缓存
