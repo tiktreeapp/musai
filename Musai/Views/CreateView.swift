@@ -548,7 +548,6 @@ struct ImageUploadSection: View {
                 }
                 .opacity(0)
             }
-            .buttonStyle(PlainButtonStyle())
         }
         .padding()
     }
