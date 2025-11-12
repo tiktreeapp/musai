@@ -831,10 +831,18 @@ struct TrackSongInfoSection: View {
                     
                     Text(track.mode.rawValue)
                         .font(.subheadline)
-                        .foregroundColor(Theme.secondaryColor)
+                        .foregroundColor(Theme.primaryColor)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
-                        .background(Theme.secondaryColor.opacity(0.2))
+                        .background(Theme.primaryColor.opacity(0.2))
+                        .cornerRadius(12)
+                    
+                    Text(track.instrumentation.rawValue)
+                        .font(.subheadline)
+                        .foregroundColor(Theme.primaryColor)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(Theme.primaryColor.opacity(0.2))
                         .cornerRadius(12)
                 }
             }

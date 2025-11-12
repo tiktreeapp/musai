@@ -71,13 +71,13 @@ struct GenerationResultView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 12)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, -12)
                     
-                    // Cover Image Section
+                    // Cover Image Section (1/3 of screen)
                     CoverImageSection(coverImage: coverImage, geometry: geometry)
                         .frame(height: geometry.size.height / 3)
                     
-                    // Song Info Section with lyrics
+                    // Song Info Section with lyrics - 在封面和播放器之间
                     SongInfoSection(
                         title: title,
                         style: style,
@@ -86,7 +86,7 @@ struct GenerationResultView: View {
                         currentLyricIndex: $currentLyricIndex,
                         audioPlayer: audioPlayer
                     )
-                    .padding(.top, 24)
+                    .padding(.top, -12)
                     .layoutPriority(1)
                     
                     Spacer()
