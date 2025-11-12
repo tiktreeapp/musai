@@ -156,6 +156,12 @@ final class MusicStorageService: ObservableObject {
             return localURL
         } else if let localPath = musicTrack.localFilePath {
             print("❌ Local file not found at: \(localPath)")
+            // 清理无效的本地路径
+            musicTrack.localFilePath = nil
+            musicTrack.isCachedLocally = false
+            if let modelContext = musicTrack.modelContext {
+                try? modelContext.save()
+            }
         }
         
         // 如果本地文件不存在，尝试从云端恢复
