@@ -182,9 +182,11 @@ struct GenerationResultView: View {
                         .padding(.bottom, 12)
                     }
                     .padding(.bottom, geometry.safeAreaInsets.bottom)
+                    .offset(y: 60) // 播放器组件向下移动60像素
                     .background(
                         Rectangle()
                             .fill(Color.black)
+                            .offset(y: 40) // 黑色背景额外向下移动40像素
                             .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
                     )
                 }
