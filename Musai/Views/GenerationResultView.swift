@@ -327,7 +327,7 @@ struct SongInfoSection: View {
                                     .animation(.easeInOut(duration: 0.3), value: currentLyricIndex)
                             }
                         }
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, 40)
                         .padding(.vertical, 10)  // 恢复水平内边距
                     }
                     .onChange(of: currentLyricIndex) { _, newIndex in
@@ -340,7 +340,7 @@ struct SongInfoSection: View {
             }
             .frame(maxHeight: 240)  // 设置固定最大高度
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 40)
     }
 }
 
