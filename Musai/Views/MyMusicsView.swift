@@ -858,6 +858,7 @@ struct TrackSongInfoSection: View {
                                     .fontWeight(index == currentLyricIndex ? .bold : .regular)
                                     .foregroundColor(index == currentLyricIndex ? Theme.primaryColor : Theme.secondaryTextColor)
                                     .multilineTextAlignment(.center)
+                                    .frame(maxWidth: .infinity)
                                     .id(index)
                                     .animation(.easeInOut(duration: 0.3), value: currentLyricIndex)
                             }
