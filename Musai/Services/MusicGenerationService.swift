@@ -310,7 +310,7 @@ final class MusicGenerationService: ObservableObject {
         
         // Poll the API until the prediction is complete
         var pollCount = 0
-        let maxPolls = 60  // Maximum 60 polls (2 minutes)
+        let maxPolls = 90  // Maximum 90 polls (3 minutes)
         print("⏳ Starting polling (max \(maxPolls) attempts, 2 seconds interval)...")
         
         while pollCount < maxPolls {
