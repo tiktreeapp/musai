@@ -937,11 +937,18 @@ struct CreateButtonView: View {
             NSLog("  - Can create: \(canCreate)")
             NSLog("  - Is creating: \(isCreating)")
             
+            // 立即设置isCreating为true，防止重复点击
+            isCreating = true
+            
             // Dismiss keyboard
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             
             Task {
                 await createMusic()
+                // 如果创建失败，确保重置isCreating状态
+                if isCreating {
+                    isCreating = false
+                }
             }
         }) {
             ZStack(alignment: .topTrailing) {
@@ -1013,7 +1020,6 @@ struct CreateButtonView: View {
         print("🎤 Instrumentation: \(params.selectedInstrumentation.rawValue)")
         print("🎤 Vocal: \(params.selectedVocal.rawValue)")
         print("🎤 Image present: \(params.selectedImage != nil)")
-        params.isCreatingBinding.wrappedValue = true
         
         // 使用NSLog确保日志在所有环境中都能看到
         NSLog("🎵 MUSIC CREATION STARTED - Title: \(params.title)")
