@@ -7,6 +7,14 @@
 
 import SwiftUI
 import SwiftData
+import AVFoundation
+
+// MARK: - Helper Functions
+private func formatTime(_ time: TimeInterval) -> String {
+    let minutes = Int(time) / 60
+    let seconds = Int(time) % 60
+    return String(format: "%02d:%02d", minutes, seconds)
+}
 
 struct GenerationResultView: View {
     let musicURL: String
@@ -38,7 +46,7 @@ struct GenerationResultView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: geometry.size.width, height: geometry.size.height)
-                        .blur(radius: 60)  // 减少虚化程度到原来的一半
+                        .blur(radius: 15)
                         .opacity(0.6)
                 }
                 
@@ -54,78 +62,132 @@ struct GenerationResultView: View {
                 )
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 
-                ScrollView {
+                VStack(spacing: 0) {
+                    // Pull Bar
+                    HStack {
+                        RoundedRectangle(cornerRadius: 2.5)
+                            .fill(Theme.secondaryTextColor.opacity(0.5))
+                            .frame(width: 36, height: 5)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 12)
+                    .padding(.bottom, 16)
+                    
+                    // Cover Image Section
+                    CoverImageSection(coverImage: coverImage, geometry: geometry)
+                        .frame(height: geometry.size.height / 3)
+                    
+                    // Song Info Section with lyrics
+                    SongInfoSection(
+                        title: title,
+                        style: style,
+                        mode: mode,
+                        lyrics: parsedLyrics,
+                        currentLyricIndex: $currentLyricIndex,
+                        audioPlayer: audioPlayer
+                    )
+                    .padding(.top, 24)
+                    .layoutPriority(1)
+                    
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .bottom) {
+                    // Player Section - 置底，有独立黑色背景
                     VStack(spacing: 0) {
-                        // Pull Bar
-                        HStack {
-                            RoundedRectangle(cornerRadius: 2.5)
-                                .fill(Theme.secondaryTextColor.opacity(0.5))
-                                .frame(width: 36, height: 5)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 8)
-                        .padding(.bottom, 16)
-                        
-                        // Cover Image Section (1/3 of screen)
-                        CoverImageSection(coverImage: coverImage, geometry: geometry)
-                            .frame(height: geometry.size.height / 3)
-                        
-                        // Player Section with adjusted position
-                        VStack(spacing: 12) { // 减小12像素间距
-                            // Generation Progress
-                            if !isGeneratingComplete {
-                                VStack(spacing: 8) {
-                                    Text("Generating Music...")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(Theme.textColor)
-                                    
-                                    ProgressView(value: generationProgress)
-                                        .progressViewStyle(LinearProgressViewStyle(tint: Theme.primaryColor))
-                                        .frame(width: 200)
-                                    
-                                    Text("\(Int(generationProgress * 100))%")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(Theme.secondaryTextColor)
-                                }
-                                .padding()
-                                .background(Theme.cardBackgroundColor)
-                                .cornerRadius(12)
+                        // Share and Favorite buttons
+                        HStack(spacing: 32) {
+                            Button(action: { shareMusic() }) {
+                                Image(systemName: "arrowshape.turn.up.right")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(Theme.secondaryTextColor)
                             }
                             
-                            PlayerSection(
-                                audioPlayer: audioPlayer,
-                                musicURL: musicURL,
-                                isFavorite: $isFavorite,
-                                onShare: { shareMusic() },
-                                onToggleFavorite: { toggleFavorite() }
-                            )
+                            Button(action: { toggleFavorite() }) {
+                                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(isFavorite ? .red : Theme.secondaryTextColor)
+                            }
                         }
-                        .padding(.top, 40) // 向下移动40像素
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 12)
                         
-                        // Song Info Section with gradient background
-                        SongInfoSection(
-                            title: title,
-                            style: style,
-                            mode: mode,
-                            lyrics: parsedLyrics,
-                            currentLyricIndex: $currentLyricIndex,
-                            audioPlayer: audioPlayer
-                        )
-                        .padding(.top, 24) // 向下移动24像素
-                        .frame(maxWidth: .infinity) // 宽度与屏幕一样宽
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Theme.backgroundColor.opacity(0.1), // 10%黑色透明度
-                                    Theme.backgroundColor
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
+                        // Progress Bar
+                        VStack(spacing: 0) {
+                            CustomSlider(
+                                value: Binding(
+                                    get: { audioPlayer.currentTime },
+                                    set: { audioPlayer.seek(to: $0) }
+                                ),
+                                range: 0...max(audioPlayer.duration, 1),
+                                step: 0.1
                             )
-                        )
+                            
+                            HStack {
+                                Text(formatTime(audioPlayer.currentTime))
+                                    .font(.caption)
+                                    .foregroundColor(Theme.secondaryTextColor)
+                                
+                                Spacer()
+                                
+                                // App icon and Musai text
+                                HStack(spacing: 4) {
+                                    Image("AppIcon-120")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 16, height: 16)
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    
+                                    Text("Musai")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Theme.secondaryTextColor)
+                                }
+                                
+                                Spacer()
+                                
+                                Text(formatTime(audioPlayer.duration))
+                                    .font(.caption)
+                                    .foregroundColor(Theme.secondaryTextColor)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        
+                        // Playback Controls
+                        HStack(spacing: 40) {
+                            Button(action: { audioPlayer.skipBackward() }) {
+                                Image(systemName: "gobackward.15")
+                                    .font(.title2)
+                                    .foregroundColor(Theme.textColor)
+                            }
+                            
+                            Button(action: { 
+                                if audioPlayer.isPlaying {
+                                    audioPlayer.pause()
+                                } else {
+                                    audioPlayer.play()
+                                }
+                            }) {
+                                Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                    .font(.system(size: 64))
+                                    .foregroundColor(Theme.primaryColor)
+                            }
+                            
+                            Button(action: { audioPlayer.skipForward() }) {
+                                Image(systemName: "goforward.15")
+                                    .font(.title2)
+                                    .foregroundColor(Theme.textColor)
+                            }
+                        }
+                        .padding(.vertical, 16)
+                        .padding(.bottom, 12)
                     }
+                    .padding(.bottom, geometry.safeAreaInsets.bottom)
+                    .background(
+                        Rectangle()
+                            .fill(Color.black)
+                            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
+                    )
                 }
-                .ignoresSafeArea()
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -153,7 +215,8 @@ struct GenerationResultView: View {
             }
         }
         .onAppear {
-            audioPlayer.loadAudio(from: musicURL)
+            // 先尝试从缓存加载，如果没有则从远程加载并缓存
+            loadAndCacheAudio()
             startLyricSync()
             
             // Simulate generation progress
@@ -221,10 +284,18 @@ struct SongInfoSection: View {
                     
                     Text(mode.rawValue)
                         .font(.subheadline)
-                        .foregroundColor(Theme.secondaryColor)
+                        .foregroundColor(Theme.primaryColor)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
-                        .background(Theme.secondaryColor.opacity(0.2))
+                        .background(Theme.primaryColor.opacity(0.2))
+                        .cornerRadius(12)
+                    
+                    Text("Piano")
+                        .font(.subheadline)
+                        .foregroundColor(Theme.primaryColor)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(Theme.primaryColor.opacity(0.2))
                         .cornerRadius(12)
                 }
             }
@@ -242,10 +313,6 @@ struct SongInfoSection: View {
                                 .id(index)
                                 .animation(.easeInOut(duration: 0.3), value: currentLyricIndex)
                         }
-                        
-                        // 添加底部间距
-                        Color.clear
-                            .frame(height: 64)
                     }
                     .padding(.horizontal, 20)
                 }
@@ -257,95 +324,6 @@ struct SongInfoSection: View {
             }
         }
         .padding(.horizontal, 20)
-    }
-}
-
-struct PlayerSection: View {
-    @ObservedObject var audioPlayer: AudioPlayerService
-    let musicURL: String
-    @Binding var isFavorite: Bool
-    let onShare: () -> Void
-    let onToggleFavorite: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            // Progress Bar with Controls
-            VStack(spacing: 8) {
-                HStack {
-                    // Share and Favorite buttons
-                    HStack(spacing: 16) {
-                        Button(action: { onShare() }) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 27)) // 增加50% (18 * 1.5 = 27)
-                                .foregroundColor(Theme.secondaryTextColor)
-                        }
-                        
-                        Button(action: { onToggleFavorite() }) {
-                            Image(systemName: isFavorite ? "heart.fill" : "heart")
-                                .font(.system(size: 27)) // 增加50% (18 * 1.5 = 27)
-                                .foregroundColor(isFavorite ? .red : Theme.secondaryTextColor)
-                        }
-                    }
-                    
-                    // Progress slider
-                    Slider(
-                        value: Binding(
-                            get: { audioPlayer.currentTime },
-                            set: { audioPlayer.seek(to: $0) }
-                        ),
-                        in: 0...max(audioPlayer.duration, 1),
-                        step: 0.1
-                    )
-                    .accentColor(Theme.primaryColor)
-                    .frame(height: 20)  // 调整高度以减小滑块大小
-                    
-                    // Duration text
-                    Text(formatTime(audioPlayer.duration))
-                        .font(.caption)
-                        .foregroundColor(Theme.secondaryTextColor)
-                        .frame(width: 40, alignment: .trailing)
-                }
-            }
-            
-            // Playback Controls
-            HStack(spacing: 32) {
-                Button(action: { audioPlayer.skipBackward() }) {
-                    Image(systemName: "gobackward.15")
-                        .font(.title2)
-                        .foregroundColor(Theme.textColor)
-                }
-                
-                Button(action: { togglePlayPause() }) {
-                    Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 64))
-                        .foregroundColor(Theme.primaryColor)
-                }
-                
-                Button(action: { audioPlayer.skipForward() }) {
-                    Image(systemName: "goforward.15")
-                        .font(.title2)
-                        .foregroundColor(Theme.textColor)
-                }
-            }
-            
-            
-        }
-        .padding(.horizontal, 32)
-        .padding(.bottom, 32)
-    }
-    
-    private func togglePlayPause() {
-        if audioPlayer.isPlaying {
-            audioPlayer.pause()
-        } else {
-            audioPlayer.play()
-        }
-    }
-    
-    private func formatTime(_ time: TimeInterval) -> String {
-        let minutes = Int(time) / 60
-        let seconds = Int(time) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
 
@@ -415,7 +393,7 @@ extension GenerationResultView {
     }
     
     private func startLyricSync() {
-        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in  // 提高更新频率到每50ms
+        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
             let currentTime = audioPlayer.currentTime
             
             // 查找当前时间对应的歌词行
@@ -495,6 +473,66 @@ extension GenerationResultView {
         }
     }
     
+    private func loadAndCacheAudio() {
+        Task {
+            do {
+                // 获取远程URL
+                guard let remoteURL = URL(string: musicURL) else {
+                    print("❌ Invalid music URL: \(musicURL)")
+                    return
+                }
+                
+                // 保存到本地缓存
+                let storageService = MusicStorageService.shared
+                
+                // 查找或创建MusicTrack
+                let fetchDescriptor = FetchDescriptor<MusicTrack>(
+                    predicate: #Predicate<MusicTrack> { track in track.title == title && track.audioURL == musicURL }
+                )
+                
+                let existingTracks = try modelContext.fetch(fetchDescriptor)
+                let musicTrack: MusicTrack
+                
+                if let existingTrack = existingTracks.first {
+                    musicTrack = existingTrack
+                    print("📝 Found existing track in database")
+                } else {
+                    // 创建新的MusicTrack并保存到数据库
+                    musicTrack = MusicTrack(
+                        title: title,
+                        lyrics: lyrics,
+                        style: style,
+                        mode: mode,
+                        speed: .medium,
+                        instrumentation: .piano,
+                        vocal: .noLimit,
+                        imageData: coverImage?.jpegData(compressionQuality: 0.8) ?? Data(),
+                        duration: 0
+                    )
+                    musicTrack.audioURL = musicURL
+                    modelContext.insert(musicTrack)
+                    try modelContext.save()
+                    print("📝 Created new track in database")
+                }
+                
+                // 缓存音频到本地
+                let localURL = try await storageService.saveMusicLocally(musicURL: remoteURL, musicTrack: musicTrack)
+                print("✅ Audio cached to: \(localURL.path)")
+                
+                // 使用本地URL加载音频
+                await MainActor.run {
+                    audioPlayer.loadAudio(from: localURL)
+                }
+            } catch {
+                print("❌ Failed to cache audio, loading from remote URL: \(error)")
+                // 如果缓存失败，直接使用远程URL
+                await MainActor.run {
+                    audioPlayer.loadAudio(from: musicURL)
+                }
+            }
+        }
+    }
+    
     private func simulateGenerationProgress() {
         Task {
             print("🎵 Starting generation progress simulation")
@@ -519,15 +557,4 @@ extension GenerationResultView {
             }
         }
     }
-}
-
-#Preview {
-    GenerationResultView(
-        musicURL: "https://example.com/music.mp3",
-        title: "Amazing Song",
-        lyrics: "Line 1\nLine 2\nLine 3\nLine 4\nLine 5",
-        style: .pop,
-        mode: .joyful,
-        coverImage: nil
-    )
 }

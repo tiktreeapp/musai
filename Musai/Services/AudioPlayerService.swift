@@ -14,11 +14,13 @@ class AudioPlayerService: NSObject, ObservableObject {
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
     @Published var playbackRate: Float = 1.0
+    @Published var hasReachedEnd = false  // 新增：标记是否播放到结尾
     
     private var player: AVPlayer?
     private var playerItem: AVPlayerItem?
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
+    private var endObserver: NSObjectProtocol?  // 播放结束通知观察者
     
     override init() {
         super.init()
@@ -34,7 +36,7 @@ class AudioPlayerService: NSObject, ObservableObject {
         }
     }
     
-    func loadAudio(from url: URL) {
+    func loadAudio(from url: URL, initialDuration: TimeInterval? = nil) {
         print("🎵 Loading new audio from URL: \(url)")
         print("  🔍 URL scheme: \(url.scheme ?? "unknown")")
         print("  📁 URL path: \(url.path)")
@@ -54,7 +56,14 @@ class AudioPlayerService: NSObject, ObservableObject {
         stop()
         isPlaying = false
         currentTime = 0.0
-        duration = 0.0
+        
+        // 使用传入的初始时长，不设置默认时长
+        if let initialDuration = initialDuration, initialDuration > 0 {
+            duration = initialDuration
+            print("📏 Using initial duration: \(initialDuration) seconds")
+        } else {
+            duration = 0.0 // 不设置默认时长，等待从音频文件获取
+        }
         
         // 清理旧的观察者
         cancellables.removeAll()
@@ -68,8 +77,41 @@ class AudioPlayerService: NSObject, ObservableObject {
                 print("🎵 Player status changed: \(status)")
                 switch status {
                 case .readyToPlay:
-                    self?.duration = self?.playerItem?.duration.seconds ?? 0
-                    print("✅ Audio ready to play, duration: \(self?.duration ?? 0)")
+                    // 使用AVAsset异步获取准确的音频时长
+                    Task {
+                        if let asset = self?.playerItem?.asset {
+                            do {
+                                let durationValue = try await asset.load(.duration)
+                                let durationInSeconds = durationValue.seconds
+                                await MainActor.run {
+                                    // 如果获取到的时长有效且大于0，则更新
+                                    if durationInSeconds > 0 {
+                                        self?.duration = durationInSeconds
+                                        print("✅ Audio ready to play, duration: \(durationInSeconds) seconds")
+                                    } else {
+                                        // 保持原有时长（可能是从数据库读取的）
+                                        print("✅ Audio ready to play, keeping existing duration: \(self?.duration ?? 0) seconds")
+                                    }
+                                    
+                                    // 如果两个时长都为0，可能是音频文件有问题
+                                    if durationInSeconds == 0 && (self?.duration ?? 0) == 0 {
+                                        print("⚠️ Warning: Audio duration is 0, file may be corrupted")
+                                        self?.checkAudioFileIntegrity(url: url)
+                                    }
+                                }
+                            } catch {
+                                await MainActor.run {
+                                    print("❌ Failed to load audio duration: \(error)")
+                                    self?.duration = 0
+                                }
+                            }
+                        } else {
+                            await MainActor.run {
+                                self?.duration = 0
+                                print("✅ Audio ready to play, duration: 0 seconds")
+                            }
+                        }
+                    }
                 case .failed:
                     if let error = self?.playerItem?.error {
                         print("❌ Failed to load audio: \(error.localizedDescription)")
@@ -85,6 +127,7 @@ class AudioPlayerService: NSObject, ObservableObject {
             .store(in: &cancellables)
         
         setupTimeObserver()
+        setupEndObserver()
     }
     
     func loadAudio(from urlString: String) {
@@ -100,7 +143,8 @@ class AudioPlayerService: NSObject, ObservableObject {
         let storageService = MusicStorageService.shared
         if let playableURL = storageService.getPlayableURL(for: musicTrack) {
             print("🎵 Loading audio from cached URL: \(playableURL.lastPathComponent)")
-            loadAudio(from: playableURL)
+            // 传递保存的duration作为初始值
+            loadAudio(from: playableURL, initialDuration: musicTrack.duration)
         } else {
             print("❌ No playable URL available for track: \(musicTrack.title)")
         }
@@ -112,20 +156,19 @@ class AudioPlayerService: NSObject, ObservableObject {
             return
         }
         
-        switch player.currentItem?.status {
-        case .readyToPlay:
-            player.play()
-            isPlaying = true
-            print("▶️ Playing audio")
-        case .failed:
-            print("❌ Cannot play: player item failed")
-        case .unknown:
-            print("⏳ Cannot play: player status unknown")
-        case .none:
-            print("❌ Cannot play: no player item")
-        @unknown default:
-            print("⚠️ Unknown player status")
+        print("🎵 Play method called, duration: \(duration)")
+        
+        // 如果之前播放到了结尾，重置状态
+        if hasReachedEnd {
+            hasReachedEnd = false
+            currentTime = 0
+            player.seek(to: .zero)
         }
+        
+        // 直接尝试播放
+        player.play()
+        isPlaying = true
+        print("▶️ Playing audio")
     }
     
     func pause() {
@@ -138,6 +181,7 @@ class AudioPlayerService: NSObject, ObservableObject {
         player?.seek(to: .zero)
         isPlaying = false
         currentTime = 0
+        hasReachedEnd = false
     }
     
     func seek(to time: TimeInterval) {
@@ -162,9 +206,48 @@ class AudioPlayerService: NSObject, ObservableObject {
         }
     }
     
+    private func setupEndObserver() {
+        // 移除之前的观察者
+        if let observer = endObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        
+        // 添加播放结束通知监听
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem,
+            queue: .main
+        ) { [weak self] _ in
+            print("🎵 Audio playback reached end")
+            self?.isPlaying = false
+            self?.hasReachedEnd = true
+            
+            // 检查是否需要请求评论
+            ReviewPromptService.shared.checkAndRequestReview()
+        }
+    }
+    
     deinit {
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
+        }
+        if let observer = endObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    
+    // 检查音频文件完整性
+    private func checkAudioFileIntegrity(url: URL) {
+        do {
+            let resourceValues = try url.resourceValues(forKeys: [.fileSizeKey])
+            if let fileSize = resourceValues.fileSize {
+                print("📁 Audio file size: \(fileSize) bytes")
+                if fileSize < 1024 {
+                    print("⚠️ Warning: Audio file is very small (\(fileSize) bytes), may be corrupted")
+                }
+            }
+        } catch {
+            print("❌ Failed to get audio file info: \(error)")
         }
     }
 }

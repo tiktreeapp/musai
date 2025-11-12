@@ -309,7 +309,7 @@ struct TrackDetailView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: geometry.size.width, height: geometry.size.height)
-                        .blur(radius: 15)  // 减少虚化程度到原来的一半
+                        .blur(radius: 15)
                         .opacity(0.6)
                 }
                 
@@ -325,56 +325,129 @@ struct TrackDetailView: View {
                 )
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 
-                ScrollView {
-                    VStack(spacing: 0) {
-                        // Pull Bar
-                        HStack {
-                            RoundedRectangle(cornerRadius: 2.5)
-                                .fill(Theme.secondaryTextColor.opacity(0.5))
-                                .frame(width: 36, height: 5)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 8)
-                        .padding(.bottom, 16)
-                        
-                        // Cover Image Section (1/3 of screen)
-                        TrackCoverImageSection(track: track, geometry: geometry)
-                            .frame(height: geometry.size.height / 3)
-                        
-                        // Player Section with adjusted position
-                        VStack(spacing: 12) {
-                            TrackPlayerSection(
-                                audioPlayer: audioPlayer,
-                                track: track,
-                                isFavorite: $isFavorite,
-                                onShare: { shareTrack() },
-                                onToggleFavorite: { toggleFavorite() }
-                            )
-                        }
-                        .padding(.top, 40)
-                        
-                        // Song Info Section with gradient background
-                        TrackSongInfoSection(
-                            track: track,
-                            lyrics: parsedLyrics,
-                            currentLyricIndex: $currentLyricIndex,
-                            audioPlayer: audioPlayer
-                        )
-                        .padding(.top, 24)
-                        .frame(maxWidth: .infinity) // 宽度与屏幕一样宽
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Theme.backgroundColor.opacity(0.1), // 10%黑色透明度
-                                    Theme.backgroundColor
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                VStack(spacing: 0) {
+                    // Pull Bar
+                    HStack {
+                        RoundedRectangle(cornerRadius: 2.5)
+                            .fill(Theme.secondaryTextColor.opacity(0.5))
+                            .frame(width: 36, height: 5)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 12)
+                    .padding(.bottom, -12)
+                    
+                    // Cover Image Section (1/3 of screen)
+                    TrackCoverImageSection(track: track, geometry: geometry)
+                        .frame(height: geometry.size.height / 3)
+                    
+                    // Song Info Section with lyrics - 在封面和播放器之间
+                    TrackSongInfoSection(
+                        track: track,
+                        lyrics: parsedLyrics,
+                        currentLyricIndex: $currentLyricIndex,
+                        audioPlayer: audioPlayer)
+                    .padding(.top, -12)
+                    .layoutPriority(1)
+                    
+                    Spacer()
                 }
-                .ignoresSafeArea()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .bottom) {
+                    // Player Section - 置底，有独立黑色背景
+                    VStack(spacing: 0) {
+                        // Share and Favorite buttons
+                        HStack(spacing: 32) {
+                            Button(action: { shareTrack() }) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(Theme.secondaryTextColor)
+                            }
+                            
+                            Button(action: { toggleFavorite() }) {
+                                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(isFavorite ? .red : Theme.secondaryTextColor)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 12)
+                        
+                        // Progress Bar
+                        VStack(spacing: 0) {
+                            CustomSlider(
+                                value: Binding(
+                                    get: { audioPlayer.currentTime },
+                                    set: { audioPlayer.seek(to: $0) }
+                                ),
+                                range: 0...max(audioPlayer.duration, 1),
+                                step: 0.1
+                            )
+                            
+                            HStack {
+                                Text(formatTime(audioPlayer.currentTime))
+                                    .font(.caption)
+                                    .foregroundColor(Theme.secondaryTextColor)
+                                
+                                Spacer()
+                                
+                                // App icon and Musai text
+                                HStack(spacing: 4) {
+                                    Image("AppIcon-120")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 16, height: 16)
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    
+                                    Text("Musai")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Theme.secondaryTextColor)
+                                }
+                                
+                                Spacer()
+                                
+                                Text(formatTime(audioPlayer.duration))
+                                    .font(.caption)
+                                    .foregroundColor(Theme.secondaryTextColor)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        
+                        // Playback Controls
+                        HStack(spacing: 40) {
+                            Button(action: { audioPlayer.skipBackward() }) {
+                                Image(systemName: "gobackward.15")
+                                    .font(.title2)
+                                    .foregroundColor(Theme.textColor)
+                            }
+                            
+                            Button(action: { 
+                                if audioPlayer.isPlaying {
+                                    audioPlayer.pause()
+                                } else {
+                                    audioPlayer.play()
+                                }
+                            }) {
+                                Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                    .font(.system(size: 64))
+                                    .foregroundColor(Theme.primaryColor)
+                            }
+                            
+                            Button(action: { audioPlayer.skipForward() }) {
+                                Image(systemName: "goforward.15")
+                                    .font(.title2)
+                                    .foregroundColor(Theme.textColor)
+                            }
+                        }
+                        .padding(.vertical, 16)
+                        .padding(.bottom, 12)
+                    }
+                    .padding(.bottom, geometry.safeAreaInsets.bottom)
+                    .background(
+                        Rectangle()
+                            .fill(Color.black)
+                            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
+                    )
+                }
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -573,6 +646,12 @@ struct TrackDetailView: View {
             print("Error deleting track: \(error)")
         }
     }
+    
+    private func formatTime(_ time: TimeInterval) -> String {
+        let minutes = Int(time) / 60
+        let seconds = Int(time) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
 }
 
 struct TrackCoverImageSection: View {
@@ -675,6 +754,17 @@ struct TrackPlayerSection: View {
         }
         .padding(.horizontal, 32)
         .padding(.bottom, 32)
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.black.opacity(0),
+                    Color.black.opacity(0.7),
+                    Color.black
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
         .onAppear {
             // 使用storageService获取可播放的URL并加载音频
             if let playableURL = storageService.getPlayableURL(for: track) {
@@ -846,167 +936,6 @@ struct PlayerControlsView: View {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%02d:%02d", minutes, seconds)
-    }
-}
-
-struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Pull Bar
-                HStack {
-                    RoundedRectangle(cornerRadius: 2.5)
-                        .fill(Theme.secondaryTextColor.opacity(0.5))
-                        .frame(width: 36, height: 5)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-                
-                List {
-                    Section("Subscription") {
-                        NavigationLink(destination: SubscriptionView()) {
-                            HStack {
-                                Image(systemName: "crown")
-                                Text("Go Premium")
-                                Spacer()
-                            }
-                        }
-                        .foregroundColor(Theme.textColor)
-                    }
-                    
-                    Section("Support") {
-                        Button(action: {
-                            shareApp()
-                        }) {
-                            HStack {
-                                Image(systemName: "square.and.arrow.up")
-                                Text("Share")
-                                Spacer()
-                            }
-                        }
-                        .foregroundColor(Theme.textColor)
-                        
-                        Button(action: {
-                            reviewApp()
-                        }) {
-                            HStack {
-                                Image(systemName: "star")
-                                Text("Review")
-                                Spacer()
-                            }
-                        }
-                        .foregroundColor(Theme.textColor)
-                    }
-                    
-                    
-                    
-                    Section("About") {
-                        HStack {
-                            Image(systemName: "info.circle")
-                            Text("Version")
-                            Spacer()
-                            Text("1.1.0")
-                                .foregroundColor(Theme.secondaryTextColor)
-                        }
-                        
-                        Button(action: {
-                            openUserAgreement()
-                        }) {
-                            HStack {
-                                Image(systemName: "doc.text")
-                                Text("Users Service")
-                                Spacer()
-                            }
-                        }
-                        .foregroundColor(Theme.textColor)
-                        
-                        Button(action: {
-                            openPrivacyPolicy()
-                        }) {
-                            HStack {
-                                Image(systemName: "doc.text")
-                                Text("Privacy Policy")
-                                Spacer()
-                            }
-                        }
-                        .foregroundColor(Theme.textColor)
-                    }
-                }
-            }
-            .musaiBackground()
-            .scrollContentBackground(.hidden)
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .foregroundColor(Theme.primaryColor)
-                }
-            }
-        }
-        .navigationViewStyle(StackNavigationViewStyle())
-    }
-    
-    private func shareApp() {
-        let shareText = "So great Musai app turned musical inspiration into a nice song. https://apps.apple.com/app/id6754842768"
-        
-        // 获取应用图标 - 使用更可靠的方式
-        var shareItems: [Any] = [shareText]
-        if let appIcon = UIImage(named: "AppIcon") {
-            shareItems.append(appIcon)
-        }
-        
-        let activityVC = UIActivityViewController(
-            activityItems: shareItems,
-            applicationActivities: nil
-        )
-        
-        // 使用正确的方式获取当前视图控制器
-        DispatchQueue.main.async {
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first,
-               let rootViewController = window.rootViewController {
-                
-                // 找到当前展示的视图控制器
-                var topViewController = rootViewController
-                while let presentedViewController = topViewController.presentedViewController {
-                    topViewController = presentedViewController
-                }
-                
-                // 对于iPad，需要设置sourceView
-                if let popover = activityVC.popoverPresentationController {
-                    popover.sourceView = topViewController.view
-                    popover.sourceRect = CGRect(x: topViewController.view.bounds.midX, y: topViewController.view.bounds.midY, width: 0, height: 0)
-                    popover.permittedArrowDirections = []
-                }
-                
-                topViewController.present(activityVC, animated: true)
-            }
-        }
-    }
-    
-    private func reviewApp() {
-        if let url = URL(string: "https://apps.apple.com/app/id6454842768?action=write-review") {
-            UIApplication.shared.open(url)
-        }
-    }
-    
-    private func openPrivacyPolicy() {
-        if let url = URL(string: "https://docs.qq.com/doc/DR2xJZkNCQU1GUGdr") {
-            UIApplication.shared.open(url)
-        }
-    }
-    
-    private func openUserAgreement() {
-        if let url = URL(string: "https://docs.qq.com/doc/DR3VvQ2xZbmZFRE9p") {
-            UIApplication.shared.open(url)
-        }
     }
 }
 
