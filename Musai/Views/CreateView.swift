@@ -549,7 +549,6 @@ struct ImageUploadSection: View {
                 .opacity(0)
             }
         }
-        .padding()
     }
 }
 
