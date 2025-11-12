@@ -179,7 +179,7 @@ struct GenerationResultView: View {
                             }
                         }
                         .padding(.vertical, 16)
-                        .padding(.bottom, -12) // 减小24像素（12-24=-12）
+                        .padding(.bottom, 18)
                     }
                     .padding(.bottom, geometry.safeAreaInsets.bottom)
                     .offset(y: 60) // 播放器组件向下移动60像素
