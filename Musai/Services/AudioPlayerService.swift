@@ -147,6 +147,12 @@ class AudioPlayerService: NSObject, ObservableObject {
             loadAudio(from: playableURL, initialDuration: musicTrack.duration)
         } else {
             print("❌ No playable URL available for track: \(musicTrack.title)")
+            // 如果没有可播放的URL，尝试重新从原始URL加载（可能已过期）
+            if let originalURL = musicTrack.audioURL,
+               let url = URL(string: originalURL) {
+                print("⚠️ Attempting to load from original URL as fallback")
+                loadAudio(from: url, initialDuration: musicTrack.duration)
+            }
         }
     }
     
