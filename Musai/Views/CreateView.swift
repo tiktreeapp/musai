@@ -945,10 +945,6 @@ struct CreateButtonView: View {
             
             Task {
                 await createMusic()
-                // 如果创建失败，确保重置isCreating状态
-                if isCreating {
-                    isCreating = false
-                }
             }
         }) {
             ZStack(alignment: .topTrailing) {
