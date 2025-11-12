@@ -179,7 +179,7 @@ struct GenerationResultView: View {
                             }
                         }
                         .padding(.vertical, 16)
-                        .padding(.bottom, 18)
+                        .padding(.bottom, 12)
                     }
                     .padding(.bottom, geometry.safeAreaInsets.bottom)
                     .offset(y: 60) // 播放器组件向下移动60像素
@@ -196,7 +196,7 @@ struct GenerationResultView: View {
                                     endPoint: .bottom
                                 )
                             )
-                            
+                            .frame(height: 324) // 增加高度24像素（300+24=324）
                             .offset(y: 50) // 黑色背景额外向下移动50像素，与MyMusicsView保持一致
                             .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
                     )
