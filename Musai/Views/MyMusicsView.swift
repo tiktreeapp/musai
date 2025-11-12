@@ -358,7 +358,7 @@ struct TrackDetailView: View {
                         // Share and Favorite buttons
                         HStack(spacing: 32) {
                             Button(action: { shareTrack() }) {
-                                Image(systemName: "square.and.arrow.up")
+                                Image(systemName: "arrowshape.turn.up.forward")
                                     .font(.system(size: 24))
                                     .foregroundColor(Theme.secondaryTextColor)
                             }
@@ -444,31 +444,20 @@ struct TrackDetailView: View {
                     .padding(.bottom, geometry.safeAreaInsets.bottom)
                     .offset(y: 60) // 播放器组件向下移动60像素
                     .background(
-                        GeometryReader { bgGeometry in
-                            ZStack {
-                                // 上半部分：从完全透明到完全不透明
-                                Rectangle()
-                                    .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [
-                                                Color.black.opacity(0),
-                                                Color.black.opacity(0.5),
-                                                Color.black.opacity(1)
-                                            ]),
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                    )
-                                    .frame(height: bgGeometry.size.height / 3)
-                                
-                                // 下半部分：保持完全不透明
-                                Rectangle()
-                                    .fill(Color.black)
-                                    .frame(height: bgGeometry.size.height * 2/3)
-                            }
-                        }
-                        .offset(y: 50) // 黑色背景额外向下移动50像素
-                        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.black.opacity(0.01),  // 最上边1%黑
+                                        Color.black.opacity(0.8),   // 往上2/3处80%黑
+                                        Color.black                 // 最底部100%黑色
+                                    ]),
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .offset(y: 50) // 黑色背景额外向下移动50像素
+                            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
                     )
                 }
             }
@@ -486,7 +475,7 @@ struct TrackDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
                     Button(action: { shareTrack() }) {
-                        Image(systemName: "square.and.arrow.up")
+                        Image(systemName: "arrowshape.turn.up.forward")
                             .foregroundColor(Theme.textColor)
                     }
                     
@@ -778,39 +767,8 @@ struct TrackPlayerSection: View {
         .padding(.horizontal, 32)
         .padding(.bottom, 32)
         .background(
-            GeometryReader { bgGeometry in
-                ZStack {
-                    // 上半部分：从完全透明到半透明
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color.black.opacity(0),
-                                    Color.black.opacity(0.33),
-                                    Color.black.opacity(0.66)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: bgGeometry.size.height / 3)
-                    
-                    // 下半部分：从半透明到完全不透明
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color.black.opacity(0.66),
-                                    Color.black.opacity(0.85),
-                                    Color.black
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: bgGeometry.size.height * 2/3)
-                }
-            }
+            Rectangle()
+                .fill(Color.black)
         )
         .onAppear {
             // 使用storageService获取可播放的URL并加载音频

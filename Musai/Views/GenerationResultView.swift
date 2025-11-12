@@ -98,7 +98,7 @@ struct GenerationResultView: View {
                         // Share and Favorite buttons
                         HStack(spacing: 32) {
                             Button(action: { shareMusic() }) {
-                                Image(systemName: "arrowshape.turn.up.right")
+                                Image(systemName: "arrowshape.turn.up.forward")
                                     .font(.system(size: 24))
                                     .foregroundColor(Theme.secondaryTextColor)
                             }
@@ -185,8 +185,18 @@ struct GenerationResultView: View {
                     .offset(y: 60) // 播放器组件向下移动60像素
                     .background(
                         Rectangle()
-                            .fill(Color.black)
-                            .offset(y: 40) // 黑色背景额外向下移动40像素
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.black.opacity(0.01),  // 最上边1%黑
+                                        Color.black.opacity(0.8),   // 往上2/3处80%黑
+                                        Color.black                 // 最底部100%黑色
+                                    ]),
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .offset(y: 50) // 黑色背景额外向下移动50像素，与MyMusicsView保持一致
                             .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
                     )
                 }
@@ -205,7 +215,7 @@ struct GenerationResultView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
                     Button(action: { shareMusic() }) {
-                        Image(systemName: "square.and.arrow.up")
+                        Image(systemName: "arrowshape.turn.up.forward")
                             .foregroundColor(Theme.textColor)
                     }
                     
