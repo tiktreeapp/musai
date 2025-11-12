@@ -499,50 +499,36 @@ extension GenerationResultView {
                     return
                 }
                 
-                // 保存到本地缓存
-                let storageService = MusicStorageService.shared
-                
-                // 查找或创建MusicTrack
+                // 查找现有的MusicTrack（不创建新的）
                 let fetchDescriptor = FetchDescriptor<MusicTrack>(
                     predicate: #Predicate<MusicTrack> { track in track.title == title && track.audioURL == musicURL }
                 )
                 
                 let existingTracks = try modelContext.fetch(fetchDescriptor)
-                let musicTrack: MusicTrack
                 
+                // 只处理已存在的track，不创建新的
                 if let existingTrack = existingTracks.first {
-                    musicTrack = existingTrack
                     print("📝 Found existing track in database")
+                    
+                    // 保存到本地缓存
+                    let storageService = MusicStorageService.shared
+                    let localURL = try await storageService.saveMusicLocally(musicURL: remoteURL, musicTrack: existingTrack)
+                    print("✅ Audio cached to: \(localURL.path)")
+                    
+                    // 使用本地URL加载音频
+                    await MainActor.run {
+                        audioPlayer.loadAudio(from: localURL)
+                    }
                 } else {
-                    // 创建新的MusicTrack并保存到数据库
-                    musicTrack = MusicTrack(
-                        title: title,
-                        lyrics: lyrics,
-                        style: style,
-                        mode: mode,
-                        speed: .medium,
-                        instrumentation: .piano,
-                        vocal: .noLimit,
-                        imageData: coverImage?.jpegData(compressionQuality: 0.8) ?? Data(),
-                        duration: 0
-                    )
-                    musicTrack.audioURL = musicURL
-                    modelContext.insert(musicTrack)
-                    try modelContext.save()
-                    print("📝 Created new track in database")
-                }
-                
-                // 缓存音频到本地
-                let localURL = try await storageService.saveMusicLocally(musicURL: remoteURL, musicTrack: musicTrack)
-                print("✅ Audio cached to: \(localURL.path)")
-                
-                // 使用本地URL加载音频
-                await MainActor.run {
-                    audioPlayer.loadAudio(from: localURL)
+                    print("📝 No existing track found, will be created by CreateView")
+                    // 直接使用远程URL，等待CreateView创建track
+                    await MainActor.run {
+                        audioPlayer.loadAudio(from: musicURL)
+                    }
                 }
             } catch {
-                print("❌ Failed to cache audio, loading from remote URL: \(error)")
-                // 如果缓存失败，直接使用远程URL
+                print("❌ Failed to load audio: \(error)")
+                // 如果失败，直接使用远程URL
                 await MainActor.run {
                     audioPlayer.loadAudio(from: musicURL)
                 }
