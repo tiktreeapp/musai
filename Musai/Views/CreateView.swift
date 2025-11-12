@@ -501,7 +501,17 @@ struct ImageUploadSection: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            PhotosPicker(selection: $selectedImageItem, matching: .images) {
+            Button(action: {
+                // 检查相册访问权限
+                PHPhotoLibrary.requestAuthorization { status in
+                    DispatchQueue.main.async {
+                        if status == .authorized {
+                            // 如果已授权，显示PhotosPicker
+                            selectedImageItem = nil // 重置选择
+                        }
+                    }
+                }
+            }) {
                 ZStack {
                     if let image = selectedImage {
                         // Compress and resize to 150x150
@@ -527,6 +537,16 @@ struct ImageUploadSection: View {
                             )
                     }
                 }
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // 只有在授权后才显示PhotosPicker
+            if PHPhotoLibrary.authorizationStatus() == .authorized {
+                PhotosPicker(selection: $selectedImageItem, matching: .images) {
+                    Color.clear
+                        .frame(width: 150, height: 150)
+                }
+                .opacity(0)
             }
             .buttonStyle(PlainButtonStyle())
         }
