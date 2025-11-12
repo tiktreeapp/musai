@@ -45,10 +45,18 @@ final class MusicStorageService: ObservableObject {
         // 下载音乐文件
         let (data, _) = try await URLSession.shared.data(from: musicURL)
         try data.write(to: localURL)
+        print("💾 Local cache saved: \(localURL.path)")
+        print("📁 File size: \(data.count) bytes")
         
         // 更新数据库中的本地路径
         musicTrack.localFilePath = localURL.path
         musicTrack.isCachedLocally = true
+        
+        // 保存更改到数据库
+        if let modelContext = musicTrack.modelContext {
+            try modelContext.save()
+            print("✅ Database updated with local path")
+        }
         
         return localURL
     }
@@ -112,11 +120,20 @@ final class MusicStorageService: ObservableObject {
             musicTrack.isUploadedToCloud = true
             musicTrack.uploadDate = Date()
             
+            // 保存到数据库
+            if let modelContext = musicTrack.modelContext {
+                try modelContext.save()
+                print("✅ Database updated with Cloudinary URL")
+            }
+            
             await MainActor.run {
                 uploadProgress = 1.0
             }
             
-            print("✅ Upload successful: \(secureURL)")
+            print("☁️ Cloudinary upload successful:")
+            print("  - URL: \(secureURL)")
+            print("  - Track: \(musicTrack.title)")
+            print("  - Date: \(Date())")
             return secureURL
         } else {
             throw StorageError.uploadFailed
@@ -125,18 +142,25 @@ final class MusicStorageService: ObservableObject {
     
     /// 获取音乐播放URL（优先本地，其次云端）
     func getPlayableURL(for musicTrack: MusicTrack) -> URL? {
+        print("\n🎵 Getting playable URL for: \(musicTrack.title)")
+        print("  - Local path: \(musicTrack.localFilePath ?? "none")")
+        print("  - Cloudinary URL: \(musicTrack.cloudinaryURL ?? "none")")
+        print("  - Original URL: \(musicTrack.audioURL ?? "none")")
+        
         // 优先使用本地缓存
         if let localPath = musicTrack.localFilePath,
            FileManager.default.fileExists(atPath: localPath) {
             let localURL = URL(fileURLWithPath: localPath)
-            print("🎵 Using local cached file: \(localURL.lastPathComponent)")
+            print("✅ Using local cached file: \(localURL.lastPathComponent)")
             return localURL
+        } else if let localPath = musicTrack.localFilePath {
+            print("❌ Local file not found at: \(localPath)")
         }
         
         // 如果本地文件不存在，尝试从云端恢复
         if let cloudinaryURL = musicTrack.cloudinaryURL,
            let cloudURL = URL(string: cloudinaryURL) {
-            print("🌐 Local file not found, attempting to restore from cloud...")
+            print("🌐 Attempting to use Cloudinary URL...")
             // 异步恢复本地缓存
             Task {
                 do {
@@ -172,6 +196,11 @@ final class MusicStorageService: ObservableObject {
         // 更新数据库中的本地路径
         musicTrack.localFilePath = localURL.path
         musicTrack.isCachedLocally = true
+        
+        // 保存到数据库
+        if let modelContext = musicTrack.modelContext {
+            try modelContext.save()
+        }
         
         print("📥 Restored local cache: \(localURL.lastPathComponent)")
         return localURL

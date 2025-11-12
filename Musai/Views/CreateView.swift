@@ -18,11 +18,7 @@ struct CreateView: View {
         case ownLyrics = "Own Lyrics"
     }
     
-    init() {
-        print("🚀 CreateView initialized!")
-        NSLog("CreateView initialized!")
-    }
-    
+    // MARK: - Properties
     @State private var selectedImage: UIImage?
     @State private var selectedImageItem: PhotosPickerItem?
     @State private var title = ""
@@ -39,11 +35,23 @@ struct CreateView: View {
     @State private var showingGenerationResult = false
     @State private var generatedMusicURL: String?
     @State private var showingSubscription = false  // 新增：用于显示订阅页面
+    @State private var showingDailyReward = false  // 新增：每日奖励弹窗
+    @State private var giftClicked = false  // 礼物是否已被点击
+    @State private var giftClickableAfter = Date()  // 礼物可点击的时间
+    @State private var rewardAmount = 0  // 奖励数量
+    @State private var showSettingsLink = false  // 是否显示设置链接
+    @State private var giftRotation = 0.0  // 礼物旋转角度
+    @State private var giftRotationTimer: Timer?  // 旋转动画计时器
+    @State private var hasReceivedDailyReward = false  // 今日是否已领取奖励
     @Environment(\.modelContext) private var modelContext
     @StateObject private var musicService = MusicGenerationService()
     @State private var isCreating = false
     @StateObject private var subscriptionManager = SubscriptionManager.shared
     
+    init() {
+        print("🚀 CreateView initialized!")
+        NSLog("CreateView initialized!")
+    }
     
     private var currentLyrics: String {
         lyricsMode == .aiLyrics ? aiLyrics : ownLyrics
@@ -111,93 +119,178 @@ struct CreateView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {  // 增加组件间距离24像素
-                    // Image Upload Section
-                    ImageUploadSection(
-                        selectedImage: $selectedImage, 
-                        selectedImageItem: $selectedImageItem,
-                        compressImage: compressAndResizeImage
-                    )
-                    
-                    // Title Input
-                    TextInputSection(title: "Title", text: $title, placeholder: "Enter your music title")
-                    
-                    // Lyrics Input - 与上方Title的距离增加24像素
-                    LyricsInputSection(
-                        aiLyrics: $aiLyrics,
-                        ownLyrics: $ownLyrics,
-                        lyricsMode: $lyricsMode,
-                        title: $title,
-                        isGeneratingLyrics: $isGeneratingLyrics,
-                        hasPastedLyrics: $hasPastedLyrics
-                    )
-                    
-                    // Options Section - 与上方Lyrics的距离增加24像素
-                    OptionsSection(
-                        selectedStyle: $selectedStyle,
-                        selectedMode: $selectedMode,
-                        selectedSpeed: $selectedSpeed,
-                        selectedInstrumentation: $selectedInstrumentation,
-                        selectedVocal: $selectedVocal
-                    )
-                    
-                    // Create Button - 与上方Options的距离增加24像素
-                    CreateButtonView(params: createButtonParams, isCreating: $isCreating)
-                        .padding(.top, 24)
-                    
-                    // 增加24像素间距
-                    Spacer()
-                        .frame(height: 24)
-                    
-                    // 增加48像素底部间距
-                    Spacer()
-                        .frame(height: 48)
+            mainContent
+                .musaiBackground()
+                .navigationTitle("Create")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    toolbarContent
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, -4)  // 上移24像素 (20-24=-4)
-            }
-            .musaiBackground()
-            .navigationTitle("Create")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
-                        Text("💎 \(SubscriptionManager.shared.diamondCount)")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(Theme.textColor)
-                    }
-                }
-            }
         }
         .navigationViewStyle(StackNavigationViewStyle())
+        .blur(radius: showingDailyReward ? 5 : 0)
+        .animation(.easeInOut(duration: 0.3), value: showingDailyReward)
         .onChange(of: selectedImageItem) { _, newItem in
-            Task {
-                if let data = try? await newItem?.loadTransferable(type: Data.self),
-                   let uiImage = UIImage(data: data) {
-                    selectedImage = uiImage
-                }
-            }
+            handleImageChange(newItem)
         }
         .sheet(isPresented: $showingGenerationResult) {
-            if let imageURL = generatedMusicURL {
-                GenerationResultView(
-                    musicURL: imageURL,
-                    title: title,
-                    lyrics: currentLyrics,
-                    style: selectedStyle,
-                    mode: selectedMode,
-                    coverImage: selectedImage
-                )
-            }
+            generationResultSheet
+                .presentationDetents([.height(UIScreen.main.bounds.height - 52)])
         }
         .sheet(isPresented: $showingSubscription) {
             SubscriptionView()
         }
         .onAppear {
-            // 请求相册访问权限
-            requestPhotoLibraryPermission()
+            setupView()
         }
+        .onDisappear {
+            cleanupView()
+        }
+        .overlay(overlayContent)
+    }
+    
+    // MARK: - Computed Properties for Body
+    @ViewBuilder
+    private var mainContent: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                ImageUploadSection(
+                    selectedImage: $selectedImage,
+                    selectedImageItem: $selectedImageItem,
+                    compressImage: compressAndResizeImage
+                )
+                
+                TextInputSection(title: "Title", text: $title, placeholder: "Enter your music title")
+                
+                LyricsInputSection(
+                    aiLyrics: $aiLyrics,
+                    ownLyrics: $ownLyrics,
+                    lyricsMode: $lyricsMode,
+                    title: $title,
+                    isGeneratingLyrics: $isGeneratingLyrics,
+                    hasPastedLyrics: $hasPastedLyrics
+                )
+                
+                OptionsSection(
+                    selectedStyle: $selectedStyle,
+                    selectedMode: $selectedMode,
+                    selectedSpeed: $selectedSpeed,
+                    selectedInstrumentation: $selectedInstrumentation,
+                    selectedVocal: $selectedVocal
+                )
+                
+                CreateButtonView(params: createButtonParams, isCreating: $isCreating)
+                    .padding(.top, 24)
+                
+                Spacer().frame(height: 24)
+                Spacer().frame(height: 48)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, -4)
+        }
+    }
+    
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            giftButton
+        }
+        
+        ToolbarItem(placement: .navigationBarTrailing) {
+            diamondCount
+        }
+    }
+    
+    private var giftButton: some View {
+        // 检查当前时间是否可以显示礼物按钮
+        let now = Date()
+        let shouldShowGift = !giftClicked || now >= giftClickableAfter
+        
+        return Group {
+            if shouldShowGift {
+                Button(action: {
+                    print("Gift button tapped - showing reward")
+                    showDailyReward()
+                    giftClicked = true
+                    giftClickableAfter = Calendar.current.date(byAdding: .hour, value: 6, to: now) ?? Date()
+                    
+                    // 保存状态到UserDefaults
+                    UserDefaults.standard.set(true, forKey: "giftClicked")
+                    UserDefaults.standard.set(giftClickableAfter, forKey: "giftClickableAfter")
+                    
+                    print("🎁 Gift clicked, will reappear at: \(giftClickableAfter ?? Date())")
+                }) {
+                    Text("🎁")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(Theme.primaryColor)
+                        .rotationEffect(.degrees(giftRotation))
+                        .animation(.easeInOut(duration: 0.5), value: giftRotation)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+    }
+    
+    private var diamondCount: some View {
+        HStack {
+            Text("💎 \(SubscriptionManager.shared.diamondCount)")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(Theme.textColor)
+        }
+    }
+    
+    @ViewBuilder
+    private var generationResultSheet: some View {
+        if let imageURL = generatedMusicURL {
+            GenerationResultView(
+                musicURL: imageURL,
+                title: title,
+                lyrics: currentLyrics,
+                style: selectedStyle,
+                mode: selectedMode,
+                coverImage: selectedImage
+            )
+        }
+    }
+    
+    @ViewBuilder
+    private var overlayContent: some View {
+        Color.black.opacity(showingDailyReward ? 0.3 : 0)
+            .ignoresSafeArea()
+            .animation(.easeInOut(duration: 0.3), value: showingDailyReward)
+            .onTapGesture {
+                // 点击蒙版不关闭弹窗
+            }
+        
+        DailyRewardView(
+            showingDailyReward: $showingDailyReward,
+            rewardAmount: $rewardAmount,
+            showSettingsLink: $showSettingsLink
+        )
+        .opacity(showingDailyReward ? 1 : 0)
+        .animation(.easeInOut(duration: 0.3), value: showingDailyReward)
+    }
+    
+    // MARK: - Helper Methods
+    private func handleImageChange(_ newItem: PhotosPickerItem?) {
+        Task {
+            if let data = try? await newItem?.loadTransferable(type: Data.self),
+               let uiImage = UIImage(data: data) {
+                selectedImage = uiImage
+            }
+        }
+    }
+    
+    private func setupView() {
+        requestPhotoLibraryPermission()
+        checkDailyRewardStatus()
+        checkGiftButtonStatus()
+        startGiftRotationAnimation()
+    }
+    
+    private func cleanupView() {
+        giftRotationTimer?.invalidate()
+        giftRotationTimer = nil
     }
     
     private func compressAndResizeImage(_ image: UIImage, targetSize: CGSize) -> UIImage {
@@ -303,6 +396,100 @@ struct CreateView: View {
             }
         @unknown default:
             print("⚠️ Unknown photo library access status")
+        }
+    }
+    
+    // MARK: - 每日奖励相关方法
+    private func checkDailyRewardStatus() {
+        let today = Calendar.current.startOfDay(for: Date())
+        let lastRewardDate = UserDefaults.standard.object(forKey: "lastDailyRewardDate") as? Date ?? Date.distantPast
+        let lastRewardDay = Calendar.current.startOfDay(for: lastRewardDate)
+        
+        // 如果今天还没领取过奖励
+        if today > lastRewardDay {
+            hasReceivedDailyReward = false
+        } else {
+            hasReceivedDailyReward = true
+        }
+    }
+    
+    private func checkGiftButtonStatus() {
+        // 从UserDefaults读取礼物点击状态
+        giftClicked = UserDefaults.standard.bool(forKey: "giftClicked")
+        
+        if giftClicked {
+            // 如果已点击，读取可点击时间
+            giftClickableAfter = UserDefaults.standard.object(forKey: "giftClickableAfter") as? Date ?? Date()
+            
+            let now = Date()
+            if now >= giftClickableAfter {
+                // 如果已经过了6小时，重置状态
+                giftClicked = false
+                UserDefaults.standard.set(false, forKey: "giftClicked")
+                print("🎁 Gift button is now available again!")
+            } else {
+                let remainingTime = giftClickableAfter.timeIntervalSince(now)
+                let hours = Int(remainingTime) / 3600
+                let minutes = (Int(remainingTime) % 3600) / 60
+                print("🎁 Gift button will be available in \(hours)h \(minutes)m")
+            }
+        }
+    }
+    
+    private func showDailyReward() {
+        // 每次点击礼物都重新生成随机奖励
+        let random = Double.random(in: 0...1)
+        if random < 0.3 {
+            rewardAmount = 1
+        } else if random < 0.5 {
+            rewardAmount = 2
+        } else {
+            rewardAmount = 3
+        }
+        
+        // 40%几率显示设置链接
+        showSettingsLink = Double.random(in: 0...1) < 0.4
+        
+        showingDailyReward = true
+    }
+    
+    private func startGiftRotationAnimation() {
+        // 5秒后开始第一次旋转
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            self.rotateGift()
+        }
+    }
+    
+    private func rotateGift() {
+        // 向右旋转45度
+        withAnimation(.easeInOut(duration: 0.5)) {
+            giftRotation = 45
+        }
+        
+        // 0.5秒后回到原位置
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                self.giftRotation = 0
+            }
+        }
+        
+        // 3秒后向左旋转45度
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                self.giftRotation = -45
+            }
+        }
+        
+        // 0.5秒后回到原位置
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                self.giftRotation = 0
+            }
+        }
+        
+        // 10秒后再次旋转
+        DispatchQueue.main.asyncAfter(deadline: .now() + 14) {
+            self.rotateGift()
         }
     }
 }
@@ -699,7 +886,8 @@ struct CreateButtonParams {
         self.selectedImageBinding = selectedImageBinding
         self.isCreatingBinding = isCreatingBinding
     }
-}
+    
+    }
 
 struct CreateButtonView: View {
     let params: CreateButtonParams
@@ -742,8 +930,6 @@ struct CreateButtonView: View {
         
         return result
     }
-    
-    
     
     var body: some View {
         Button(action: {
@@ -868,7 +1054,10 @@ struct CreateButtonView: View {
             print("  - Vocal: \(params.selectedVocal.rawValue)")
             
             // First get prediction ID
-            print("📡 Step 1: Getting prediction ID...")
+            let step1StartTime = Date()
+            print("📡 [\(DateFormatter().string(from: step1StartTime))] Step 1: Getting prediction ID...")
+            NSLog("📡 MUSIC GENERATION STEP 1 START - Getting prediction ID")
+            
             let predictionId = try await params.musicService.generateMusic(
                 prompt: prompt,
                 style: params.selectedStyle,
@@ -878,12 +1067,29 @@ struct CreateButtonView: View {
                 vocal: params.selectedVocal,
                 imageData: imageData
             )
-            print("✅ Prediction ID received: \(predictionId)")
+            
+            let step1EndTime = Date()
+            let step1Duration = step1EndTime.timeIntervalSince(step1StartTime)
+            print("✅ [\(DateFormatter().string(from: step1EndTime))] Prediction ID received: \(predictionId)")
+            print("⏱️ Step 1 completed in \(String(format: "%.2f", step1Duration)) seconds")
+            NSLog("✅ MUSIC GENERATION STEP 1 COMPLETE - ID: \(predictionId), Duration: \(String(format: "%.2f", step1Duration))s")
             
             // Then get the actual music URL
-            print("📡 Step 2: Getting music URL...")
+            let step2StartTime = Date()
+            print("📡 [\(DateFormatter().string(from: step2StartTime))] Step 2: Getting music URL...")
+            NSLog("📡 MUSIC GENERATION STEP 2 START - Getting music URL for ID: \(predictionId)")
+            
             let musicURL = try await params.musicService.getMusicURL(for: predictionId)
-            print("✅ Music URL received: \(musicURL)")
+            
+            let step2EndTime = Date()
+            let step2Duration = step2EndTime.timeIntervalSince(step2StartTime)
+            let totalDuration = step2EndTime.timeIntervalSince(step1StartTime)
+            
+            print("✅ [\(DateFormatter().string(from: step2EndTime))] Music URL received: \(musicURL)")
+            print("⏱️ Step 2 completed in \(String(format: "%.2f", step2Duration)) seconds")
+            print("⏱️ Total generation time: \(String(format: "%.2f", totalDuration)) seconds")
+            NSLog("✅ MUSIC GENERATION STEP 2 COMPLETE - URL: \(musicURL), Duration: \(String(format: "%.2f", step2Duration))s")
+            NSLog("✅ MUSIC GENERATION COMPLETE - Total time: \(String(format: "%.2f", totalDuration))s")
             
             // 立即跳转到播放页面
             params.generatedMusicURL = musicURL.absoluteString
@@ -895,6 +1101,10 @@ struct CreateButtonView: View {
             SubscriptionManager.shared.useDiamonds()
             print("💎 Remaining diamonds: \(SubscriptionManager.shared.diamondCount)")
             
+            // 重置创建状态
+            params.isCreatingBinding.wrappedValue = false
+            print("✅ Create button state reset")
+            
             // 在后台保存和缓存音乐
             let title = params.title
             let lyrics = params.lyrics
@@ -903,10 +1113,10 @@ struct CreateButtonView: View {
             let selectedSpeed = params.selectedSpeed
             let selectedInstrumentation = params.selectedInstrumentation
             let selectedVocal = params.selectedVocal
-            let modelContextRef = params.modelContext
+            let modelContext = params.modelContext
             
             Task.detached {
-                await self.saveAndCacheMusicInBackground(
+                await saveMusicTrack(
                     title: title,
                     lyrics: lyrics,
                     style: selectedStyle,
@@ -914,48 +1124,86 @@ struct CreateButtonView: View {
                     speed: selectedSpeed,
                     instrumentation: selectedInstrumentation,
                     vocal: selectedVocal,
-                    image: image,
+                    imageData: imageData,
                     musicURL: musicURL,
-                    modelContext: modelContextRef
+                    modelContext: modelContext
                 )
             }
             
-            params.isCreatingBinding.wrappedValue = false
-            print("✅✅✅ MUSIC CREATION COMPLETED SUCCESSFULLY! ✅✅✅")
-            print("📅 Completion time: \(Date())")
-            NSLog("✅ MUSIC CREATION SUCCESS - Title: \(params.title)")
-            
         } catch {
-            print("❌ Error creating music: \(error.localizedDescription)")
-            print("📅 Error time: \(Date())")
-            print("🔍 Error type: \(type(of: error))")
+            let timestamp = DateFormatter().string(from: Date())
+            print("❌ [\(timestamp)] Error creating music: \(error)")
+            NSLog("❌ MUSIC CREATION ERROR: \(error)")
             
-            if let apiError = error as? MusicGenerationError {
-                print("🔍 API Error details: \(apiError.errorDescription ?? "Unknown error")")
+            // 检查错误类型并记录详细信息
+            if let musicError = error as? MusicGenerationError {
+                print("🎵 Music Generation Error Type: \(musicError)")
+                switch musicError {
+                case .invalidURL:
+                    print("  - Invalid URL configured")
+                case .invalidRequest:
+                    print("  - Invalid request parameters")
+                case .invalidResponse:
+                    print("  - Invalid response from server")
+                case .invalidAPIKey:
+                    print("  - API key issue")
+                case .rateLimitExceeded:
+                    print("  - Rate limit exceeded")
+                case .serverError(let code):
+                    print("  - Server error with code: \(code)")
+                case .invalidMusicURL:
+                    print("  - Invalid music URL returned")
+                case .predictionFailed(let message):
+                    print("  - Prediction failed: \(message)")
+                case .networkError:
+                    print("  - Network error occurred")
+                }
             }
             
+            // 检查是否是网络错误
             if let urlError = error as? URLError {
-                print("🔍 URLError details:")
-                print("  - Code: \(urlError.code.rawValue)")
-                print("  - Description: \(urlError.localizedDescription)")
-                print("  - Failing URL: \(urlError.failingURL?.absoluteString ?? "Unknown")")
+                print("🌐 Network error details:")
+                print("  - Code: \(urlError.code)")
+                print("  - Localized description: \(urlError.localizedDescription)")
+                print("  - Failure reason: \(urlError.localizedDescription)")
+                print("  - Domain: URLError")
+                
+                switch urlError.code {
+                case .notConnectedToInternet:
+                    print("  - No internet connection")
+                case .timedOut:
+                    print("  - Request timed out")
+                case .cannotFindHost:
+                    print("  - Cannot find host")
+                case .networkConnectionLost:
+                    print("  - Network connection lost")
+                case .badServerResponse:
+                    print("  - Bad server response")
+                default:
+                    print("  - Other network error: \(urlError.code)")
+                }
             }
             
-            // 检查是否是任务取消错误
-            if error is CancellationError {
-                print("⚠️ Music generation was cancelled")
+            // 记录完整的错误堆栈
+            print("📋 Error stack trace:")
+            Thread.callStackSymbols.forEach { symbol in
+                print("  - \(symbol)")
             }
             
-            // 打印完整的错误堆栈
-            print("🔍 Full error: \(error)")
+            await MainActor.run {
+                params.isCreatingBinding.wrappedValue = false
+                print("🔄 Reset isCreating flag to false")
+            }
         }
-        
-        params.isCreatingBinding.wrappedValue = false
-        print("🏁 Music creation process completed at: \(Date())")
     }
     
-    // 后台保存和缓存音乐
-    private func saveAndCacheMusicInBackground(
+    private func generateAILyricsIfNeeded() async {
+        // This is a placeholder - actual implementation would call the lyrics service
+        // For now, we'll just wait a moment to simulate the process
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+    }
+    
+    private func saveMusicTrack(
         title: String,
         lyrics: String,
         style: MusicStyle,
@@ -963,30 +1211,17 @@ struct CreateButtonView: View {
         speed: MusicSpeed,
         instrumentation: MusicInstrumentation,
         vocal: MusicVocal,
-        image: UIImage,
+        imageData: Data,
         musicURL: URL,
-        modelContext: ModelContext?
+        modelContext: ModelContext
     ) async {
-        guard let modelContext = modelContext else { return }
+        print("💾 Saving music track to database...")
+        
+        // 获取音频时长
+        let audioDuration = await getAudioDuration(from: musicURL)
+        print("📏 Audio duration: \(audioDuration) seconds")
         
         await MainActor.run {
-            print("🎵 Background: Starting save and cache process")
-        }
-        
-        do {
-            // 压缩图片
-            guard let finalImageData = image.jpegData(compressionQuality: 0.8) else {
-                await MainActor.run {
-                    print("❌ Background: Failed to compress image")
-                }
-                return
-            }
-            
-            // 创建音乐记录
-            await MainActor.run {
-                print("🎵 Background: Creating music track record...")
-            }
-            
             let musicTrack = MusicTrack(
                 title: title,
                 lyrics: lyrics,
@@ -995,61 +1230,39 @@ struct CreateButtonView: View {
                 speed: speed,
                 instrumentation: instrumentation,
                 vocal: vocal,
-                imageData: finalImageData
+                imageData: imageData,
+                duration: audioDuration
             )
+            
+            // Set the audioURL separately
             musicTrack.audioURL = musicURL.absoluteString
             
-            // 保存到数据库
-            await MainActor.run {
-                print("💾 Background: Saving to database...")
-                modelContext.insert(musicTrack)
-                do {
-                    try modelContext.save()
-                    print("✅ Background: Saved to database successfully")
-                } catch {
-                    print("❌ Background: Failed to save to database: \(error)")
+            modelContext.insert(musicTrack)
+            
+            do {
+                try modelContext.save()
+                print("✅ Music track saved successfully with duration: \(audioDuration) seconds")
+                
+                // 保存到数据库后，立即缓存音乐到本地
+                Task.detached {
+                    await self.cacheMusicToLocal(musicTrack: musicTrack, musicURL: musicURL)
                 }
-            }
-            
-            // 缓存音乐到本地和云端
-            await MainActor.run {
-                print("💾 Background: Caching music locally and to cloud...")
-            }
-            await cacheMusicAfterGeneration(musicTrack: musicTrack, musicURL: musicURL)
-            
-            await MainActor.run {
-                print("✅ Background: Save and cache process completed")
-            }
-            
-        } catch {
-            await MainActor.run {
-                print("❌ Background: Error in save and cache process: \(error)")
+            } catch {
+                print("❌ Error saving music track: \(error)")
             }
         }
     }
     
-    private func generateAILyricsIfNeeded() async {
-        // 模拟API调用
-        print("📝 Generating AI lyrics for title: \(params.title)")
-        
-        // 创建一个Promise来等待异步操作完成
-        await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
-                // 示例歌词内容
-                params.lyricsBinding.wrappedValue = "[Verse]\nThis is an AI generated song\nBased on your title: \(params.title)\n\n[Chorus]\nMusic flows like magic\nAI creates what we imagine\n\n[Bridge]\nEvery note is crafted\nWith artificial intelligence\n\n[Outro]\nEnjoy your unique creation"
-                continuation.resume()
-            }
-        }
-    }
-    
-    private func cacheMusicAfterGeneration(musicTrack: MusicTrack, musicURL: URL) async {
-        let storageService = MusicStorageService.shared
+    // 缓存音乐到本地和云端
+    private func cacheMusicToLocal(musicTrack: MusicTrack, musicURL: URL) async {
+        print("💾 Starting to cache music to local storage...")
         
         do {
+            let storageService = MusicStorageService.shared
+            
             // 1. 先保存到本地缓存
-            print("💾 Caching music locally...")
             let localURL = try await storageService.saveMusicLocally(musicURL: musicURL, musicTrack: musicTrack)
-            print("✅ Local cache saved: \(localURL.lastPathComponent)")
+            print("✅ Music cached successfully to: \(localURL.path)")
             
             // 2. 后台上传到Cloudinary（不阻塞主流程）
             print("☁️ Starting background cloud upload...")
@@ -1064,55 +1277,147 @@ struct CreateButtonView: View {
             }
             
         } catch {
-            print("❌ Cache failed: \(error.localizedDescription)")
-            // 记录缓存失败状态
-            await MainActor.run {
-                musicTrack.isCachedLocally = false
+            print("❌ Failed to cache music locally: \(error)")
+        }
+    }
+    
+    // 获取音频文件时长
+    private func getAudioDuration(from url: URL) async -> TimeInterval {
+        do {
+            print("🔍 Attempting to get duration for URL: \(url)")
+            let asset = AVAsset(url: url)
+            
+            // 检查 asset 是否可播放
+            let status = try await asset.load(.isReadable)
+            print("🔍 Asset is readable: \(status)")
+            
+            let duration = try await asset.load(.duration)
+            let durationInSeconds = duration.seconds
+            print("📏 Retrieved duration for \(url.lastPathComponent): \(durationInSeconds) seconds")
+            
+            // 如果获取到的时长为0或无效，返回默认值
+            if durationInSeconds.isNaN || durationInSeconds.isInfinite || durationInSeconds <= 0 {
+                print("⚠️ Invalid duration (\(durationInSeconds)), using default 180 seconds")
+                return 180.0
             }
+            
+            return durationInSeconds
+        } catch {
+            print("❌ Failed to get audio duration: \(error)")
+            print("📍 URL scheme: \(url.scheme ?? "unknown")")
+            print("📍 URL absoluteString: \(url.absoluteString)")
+            // 返回默认时长而不是0
+            print("⚠️ Using default duration: 180 seconds")
+            return 180.0
         }
     }
 }
 
-struct ProgressOverlayView: View {
-    let musicProgress: Double
-    let uploadProgress: Double
-    let isUploading: Bool
+// MARK: - 每日奖励弹窗视图
+struct DailyRewardView: View {
+    @Binding var showingDailyReward: Bool
+    @Binding var rewardAmount: Int
+    @Binding var showSettingsLink: Bool
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
     
     var body: some View {
         ZStack {
-            Theme.overlayColor
-                .ignoresSafeArea()
-            
-            VStack(spacing: 24) {
-                Text(isUploading ? "Uploading Image..." : "Generating Music...")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(Theme.textColor)
-                
-                ProgressView(value: isUploading ? uploadProgress : musicProgress)
-                    .progressViewStyle(LinearProgressViewStyle(tint: Theme.primaryColor))
-                    .frame(width: 200)
-                
-                Text("\(Int((isUploading ? uploadProgress : musicProgress) * 100))%")
-                    .font(.system(size: 16))
-                    .foregroundColor(Theme.secondaryTextColor)
-                
-                if isUploading {
-                    Text("Uploading image to cloud storage...")
-                        .font(.caption)
-                        .foregroundColor(Theme.secondaryTextColor)
-                        .multilineTextAlignment(.center)
-                } else {
-                    Text("AI is creating your unique music...")
-                        .font(.caption)
-                        .foregroundColor(Theme.secondaryTextColor)
-                        .multilineTextAlignment(.center)
+            // 弹窗主体
+            VStack(spacing: 20) {
+                // 右上角关闭按钮
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        showingDailyReward = false
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Color.white.opacity(0.2))
+                            .clipShape(Circle())
+                    }
                 }
+                .padding(.trailing, -2) // 右移12像素 (10-28+6=-2)
+                .padding(.top, -6) // 上移12像素 (10-38+22=-6)
+                
+                // 奖励文本
+                VStack(spacing: 5) {
+                    Text("Good Lucky")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white)
+                    
+                    if showSettingsLink {
+                        Text("Get more 💎 in Setting page")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white)
+                    } else {
+                        Text("for receive 💎 \(rewardAmount) reward.")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+                }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
+                .offset(y: -10) // 上移20像素
+                
+                // 按钮
+                Button(action: {
+                    if showSettingsLink {
+                        // 关闭弹窗
+                        showingDailyReward = false
+                    } else {
+                        claimReward()
+                    }
+                }) {
+                    Text(showSettingsLink ? "OK" : "Claim")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 112) // 宽度改为目前的一半 (28*2*0.8*0.5≈22.4，实际使用22.4*5≈112)
+                        .frame(height: 38) // 高度改为目前的120% (34*1.2≈41)
+                        .background(Theme.primaryColor)
+                        .cornerRadius(17)
+                }
+                .offset(y: 0) // 上移20像素
             }
-            .padding(32)
-            .background(Theme.cardBackgroundColor)
-            .cornerRadius(16)
+            .frame(maxWidth: 320) // 固定最大宽度为原来的80% (约375*0.8=300)
+            .padding(.vertical, 24) // 高度改为18像素
+            .padding(.horizontal, 12) // 减小内边距
+            .background(
+                RoundedRectangle(cornerRadius: 11)
+                    .fill(Color.black.opacity(0.9))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 11)
+                    .stroke(Theme.primaryColor, lineWidth: 2)
+            )
+            .zIndex(1) // 确保弹窗内容在蒙版之上
+            
+            // 礼物图标 - 放在绿色线框上面
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Text("🎁")
+                        .font(.system(size: 60))
+                        .offset(y: -90) // 下移20像素
+                    Spacer()
+                }
+                Spacer()
+            }
+            .zIndex(2) // 确保礼物在最上层，盖住边框
         }
+    }
+    
+    private func claimReward() {
+        // 增加钻石
+        subscriptionManager.addDiamonds(rewardAmount)
+        
+        // 记录今日已领取
+        UserDefaults.standard.set(Date(), forKey: "lastDailyRewardDate")
+        
+        // 关闭弹窗
+        showingDailyReward = false
     }
 }
 

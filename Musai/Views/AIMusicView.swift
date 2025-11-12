@@ -53,7 +53,7 @@ struct AIMusicView: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(Theme.backgroundColor)
                         .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 2) // 减少垂直padding到2px
                         .background(Theme.primaryColor)
                         .cornerRadius(16)
                     }

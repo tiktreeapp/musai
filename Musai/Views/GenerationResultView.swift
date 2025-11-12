@@ -302,28 +302,33 @@ struct SongInfoSection: View {
                 }
             }
             
-            // Scrolling Lyrics
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 12) {
-                        ForEach(Array(lyrics.enumerated()), id: \.offset) { index, lyric in
-                            Text(lyric.text)
-                                .font(.system(size: index == currentLyricIndex ? 18 : 16))
-                                .fontWeight(index == currentLyricIndex ? .bold : .regular)
-                                .foregroundColor(index == currentLyricIndex ? Theme.primaryColor : Theme.secondaryTextColor)
-                                .multilineTextAlignment(.center)
-                                .id(index)
-                                .animation(.easeInOut(duration: 0.3), value: currentLyricIndex)
+            // Scrolling Lyrics with fixed height
+            GeometryReader { lyricsGeometry in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            ForEach(Array(lyrics.enumerated()), id: \.offset) { index, lyric in
+                                Text(lyric.text)
+                                    .font(.system(size: index == currentLyricIndex ? 18 : 16))
+                                    .fontWeight(index == currentLyricIndex ? .bold : .regular)
+                                    .foregroundColor(index == currentLyricIndex ? Theme.primaryColor : Theme.secondaryTextColor)
+                                    .multilineTextAlignment(.center)
+                                    .id(index)
+                                    .animation(.easeInOut(duration: 0.3), value: currentLyricIndex)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)  // 恢复水平内边距
+                    }
+                    .onChange(of: currentLyricIndex) { _, newIndex in
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            proxy.scrollTo(newIndex, anchor: .center)
                         }
                     }
-                    .padding(.horizontal, 20)
                 }
-                .onChange(of: currentLyricIndex) { _, newIndex in
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        proxy.scrollTo(newIndex, anchor: .center)
-                    }
-                }
+                .frame(height: min(lyricsGeometry.size.height, 240))  // 限制最大高度为240
             }
+            .frame(maxHeight: 240)  // 设置固定最大高度
         }
         .padding(.horizontal, 20)
     }

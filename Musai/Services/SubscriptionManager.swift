@@ -165,9 +165,10 @@ final class SubscriptionManager: ObservableObject {
         }
     }
     
-    private func addDiamonds(_ amount: Int) {
+    func addDiamonds(_ amount: Int) {
         diamondCount += amount
         UserDefaults.standard.set(diamondCount, forKey: "diamondCount")
+        print("💎 Added \(amount) diamonds, current balance: \(diamondCount)")
     }
     
     func loadDiamondCount() {

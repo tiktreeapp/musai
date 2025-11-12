@@ -11,6 +11,7 @@ struct Theme {
     static let backgroundColor = Color.black
     static let primaryColor = Color.green
     static let secondaryColor = Color.green.opacity(0.8)
+    static let tertiaryColor = Color.blue
     static let accentColor = Color.green.opacity(0.6)
     static let textColor = Color.white
     static let secondaryTextColor = Color.gray

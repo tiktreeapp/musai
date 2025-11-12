@@ -111,11 +111,18 @@ final class MusicGenerationService: ObservableObject {
         imageData: Data? = nil
     ) async throws -> String {
         
-        print("=== MUSIC GENERATION START ===")
+        let timestamp = DateFormatter().string(from: Date())
+        print("=== [\(timestamp)] MUSIC GENERATION START ===")
+        NSLog("=== MUSIC GENERATION START ===")
         logDebug("Starting music generation")
         print("🎵 Lyrics: \(prompt)")
+        print("🎵 Lyrics length: \(prompt.count) characters")
         logDebug("Parameters: style=\(style.rawValue), mode=\(mode.rawValue), speed=\(speed.rawValue)")
+        logDebug("Instrumentation: \(instrumentation.rawValue), Vocal: \(vocal.rawValue)")
         logDebug("Has image: \(imageData != nil)")
+        if imageData != nil {
+            print("📷 Image size: \(imageData!.count) bytes")
+        }
         
         isGenerating = true
         generationProgress = 0.0
@@ -283,10 +290,19 @@ final class MusicGenerationService: ObservableObject {
     }
     
     func getMusicURL(for predictionId: String) async throws -> URL {
+        let pollStartTime = Date()
+        let timestamp = DateFormatter().string(from: pollStartTime)
+        print("=== [\(timestamp)] MUSIC URL POLLING START ===")
+        print("🔍 Checking status for prediction ID: \(predictionId)")
+        NSLog("=== MUSIC URL POLLING START - ID: \(predictionId) ===")
+        
         // Create the URL for checking the prediction status via backend API
         guard let url = URL(string: "\(backendURL)/status/\(predictionId)") else {
+            print("❌ Failed to create status URL for ID: \(predictionId)")
             throw MusicGenerationError.invalidURL
         }
+        
+        print("📡 Status URL: \(url.absoluteString)")
         
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -295,6 +311,7 @@ final class MusicGenerationService: ObservableObject {
         // Poll the API until the prediction is complete
         var pollCount = 0
         let maxPolls = 60  // Maximum 60 polls (2 minutes)
+        print("⏳ Starting polling (max \(maxPolls) attempts, 2 seconds interval)...")
         
         while pollCount < maxPolls {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -326,27 +343,48 @@ final class MusicGenerationService: ObservableObject {
             
             // Check if the prediction is complete
             if backendResponse.status == "succeeded" {
+                let pollEndTime = Date()
+                let totalPollTime = pollEndTime.timeIntervalSince(pollStartTime)
+                print("✅ [\(DateFormatter().string(from: pollEndTime))] Music generation succeeded!")
+                print("⏱️ Total polling time: \(String(format: "%.2f", totalPollTime)) seconds")
+                print("📊 Total polls: \(pollCount)")
+                NSLog("✅ MUSIC GENERATION SUCCEEDED - ID: \(predictionId), Polls: \(pollCount), Time: \(String(format: "%.2f", totalPollTime))s")
+                
                 if let urlString = backendResponse.musicURL {
+                    print("🎵 Music URL from backend: \(urlString)")
                     // If URL is relative, prepend backend URL
                     let fullURLString = urlString.hasPrefix("http") ? urlString : "\(backendURL)\(urlString)"
+                    print("🎵 Full music URL: \(fullURLString)")
                     if let musicURL = URL(string: fullURLString) {
                         return musicURL
                     } else {
-                        print("⚠️ Music generation succeeded but invalid musicURL: \(fullURLString)")
+                        print("❌ Music generation succeeded but invalid musicURL: \(fullURLString)")
+                        NSLog("❌ INVALID MUSIC URL: \(fullURLString)")
                         throw MusicGenerationError.invalidMusicURL
                     }
                 } else {
-                    print("⚠️ Music generation succeeded but no musicURL returned — stopping polling.")
+                    print("❌ Music generation succeeded but no musicURL returned")
+                    NSLog("❌ NO MUSIC URL RETURNED - ID: \(predictionId)")
                     throw MusicGenerationError.invalidMusicURL
                 }
             } else if backendResponse.status == "failed" {
+                let pollEndTime = Date()
+                let totalPollTime = pollEndTime.timeIntervalSince(pollStartTime)
+                print("❌ [\(DateFormatter().string(from: pollEndTime))] Music generation failed!")
+                print("⏱️ Total polling time: \(String(format: "%.2f", totalPollTime)) seconds")
+                print("📊 Total polls: \(pollCount)")
+                
                 // Throw an error if the prediction failed
                 let errorMessage = backendResponse.error ?? "Unknown error"
+                print("🚫 Failure reason: \(errorMessage)")
+                NSLog("❌ MUSIC GENERATION FAILED - ID: \(predictionId), Error: \(errorMessage), Polls: \(pollCount)")
                 throw MusicGenerationError.predictionFailed(errorMessage)
             } else {
                 // Log the current status every 10 seconds (reduce noise)
                 if pollCount % 5 == 0 {
-                    print("⏳ Music generation status: \(backendResponse.status)")
+                    let elapsed = Date().timeIntervalSince(pollStartTime)
+                    print("⏳ [\(DateFormatter().string(from: Date()))] Music generation status: \(backendResponse.status)")
+                    print("   Poll #\(pollCount), elapsed: \(String(format: "%.1f", elapsed))s")
                 }
                 generationProgress = min(0.9, generationProgress + 0.1)
                 pollCount += 1
@@ -356,7 +394,13 @@ final class MusicGenerationService: ObservableObject {
         }
         
         // If we reach here, we've exceeded the maximum number of polls
-        throw MusicGenerationError.predictionFailed("Music generation timed out after \(maxPolls) attempts")
+        let pollEndTime = Date()
+        let totalPollTime = pollEndTime.timeIntervalSince(pollStartTime)
+        print("❌ [\(DateFormatter().string(from: pollEndTime))] Music generation timed out!")
+        print("⏱️ Total polling time: \(String(format: "%.2f", totalPollTime)) seconds")
+        print("📊 Total polls: \(pollCount)/\(maxPolls)")
+        NSLog("❌ MUSIC GENERATION TIMEOUT - ID: \(predictionId), Polls: \(pollCount)/\(maxPolls), Time: \(String(format: "%.2f", totalPollTime))s")
+        throw MusicGenerationError.predictionFailed("Music generation timed out after \(maxPolls) attempts (\(String(format: "%.2f", totalPollTime))s)")
     }
     
     // MARK: - Image upload is no longer needed for music generation

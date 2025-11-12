@@ -31,7 +31,7 @@ final class MusicTrack {
     var lastPlayedAt: Date?
     var playCount: Int = 0
     
-    init(title: String, lyrics: String, style: MusicStyle, mode: MusicMode, speed: MusicSpeed, instrumentation: MusicInstrumentation, vocal: MusicVocal, imageData: Data? = nil) {
+    init(title: String, lyrics: String, style: MusicStyle, mode: MusicMode, speed: MusicSpeed, instrumentation: MusicInstrumentation, vocal: MusicVocal, imageData: Data? = nil, duration: TimeInterval? = nil) {
         self.id = UUID()
         self.title = title
         self.lyrics = lyrics
@@ -42,6 +42,7 @@ final class MusicTrack {
         self.vocal = vocal
         self.imageData = imageData
         self.createdAt = Date()
+        self.duration = duration
     }
 }
 

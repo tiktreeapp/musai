@@ -444,10 +444,31 @@ struct TrackDetailView: View {
                     .padding(.bottom, geometry.safeAreaInsets.bottom)
                     .offset(y: 60) // 播放器组件向下移动60像素
                     .background(
-                        Rectangle()
-                            .fill(Color.black)
-                            .offset(y: 50) // 黑色背景额外向下移动50像素
-                            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
+                        GeometryReader { bgGeometry in
+                            ZStack {
+                                // 上半部分：从完全透明到完全不透明
+                                Rectangle()
+                                    .fill(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                Color.black.opacity(0),
+                                                Color.black.opacity(0.5),
+                                                Color.black.opacity(1)
+                                            ]),
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .frame(height: bgGeometry.size.height / 3)
+                                
+                                // 下半部分：保持完全不透明
+                                Rectangle()
+                                    .fill(Color.black)
+                                    .frame(height: bgGeometry.size.height * 2/3)
+                            }
+                        }
+                        .offset(y: 50) // 黑色背景额外向下移动50像素
+                        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
                     )
                 }
             }
@@ -757,15 +778,39 @@ struct TrackPlayerSection: View {
         .padding(.horizontal, 32)
         .padding(.bottom, 32)
         .background(
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.black.opacity(0),
-                    Color.black.opacity(0.7),
-                    Color.black
-                ]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            GeometryReader { bgGeometry in
+                ZStack {
+                    // 上半部分：从完全透明到半透明
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.black.opacity(0),
+                                    Color.black.opacity(0.33),
+                                    Color.black.opacity(0.66)
+                                ]),
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(height: bgGeometry.size.height / 3)
+                    
+                    // 下半部分：从半透明到完全不透明
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.black.opacity(0.66),
+                                    Color.black.opacity(0.85),
+                                    Color.black
+                                ]),
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(height: bgGeometry.size.height * 2/3)
+                }
+            }
         )
         .onAppear {
             // 使用storageService获取可播放的URL并加载音频
@@ -836,34 +881,35 @@ struct TrackSongInfoSection: View {
                 }
             }
             
-            // Scrolling Lyrics
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 12) {
-                        ForEach(Array(lyrics.enumerated()), id: \.offset) { index, lyric in
-                            Text(lyric.text)
-                                .font(.system(size: index == currentLyricIndex ? 18 : 16))
-                                .fontWeight(index == currentLyricIndex ? .bold : .regular)
-                                .foregroundColor(index == currentLyricIndex ? Theme.primaryColor : Theme.secondaryTextColor)
-                                .multilineTextAlignment(.center)
-                                .id(index)
-                                .animation(.easeInOut(duration: 0.3), value: currentLyricIndex)
+            // Scrolling Lyrics with fixed height
+            GeometryReader { lyricsGeometry in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            ForEach(Array(lyrics.enumerated()), id: \.offset) { index, lyric in
+                                Text(lyric.text)
+                                    .font(.system(size: index == currentLyricIndex ? 18 : 16))
+                                    .fontWeight(index == currentLyricIndex ? .bold : .regular)
+                                    .foregroundColor(index == currentLyricIndex ? Theme.primaryColor : Theme.secondaryTextColor)
+                                    .multilineTextAlignment(.center)
+                                    .id(index)
+                                    .animation(.easeInOut(duration: 0.3), value: currentLyricIndex)
+                            }
                         }
-                        
-                        // 添加底部间距
-                        Color.clear
-                            .frame(height: 64)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)  // 恢复水平内边距
                     }
-                    .padding(.horizontal, 20)
-                }
-                .onChange(of: currentLyricIndex) { _, newIndex in
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        proxy.scrollTo(newIndex, anchor: .center)
+                    .onChange(of: currentLyricIndex) { _, newIndex in
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            proxy.scrollTo(newIndex, anchor: .center)
+                        }
                     }
                 }
+                .frame(height: min(lyricsGeometry.size.height, 240))  // 限制最大高度为240
             }
+            .frame(maxHeight: 218)  // 设置固定最大高度
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 40)
     }
 }
 
