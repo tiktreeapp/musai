@@ -498,30 +498,10 @@ struct ImageUploadSection: View {
     @Binding var selectedImage: UIImage?
     @Binding var selectedImageItem: PhotosPickerItem?
     let compressImage: (UIImage, CGSize) -> UIImage
-    @State private var showPhotosPicker = false
     
     var body: some View {
         VStack(spacing: 16) {
-            Button(action: {
-                // 检查相册访问权限
-                let status = PHPhotoLibrary.authorizationStatus()
-                if status == .authorized {
-                    // 已授权，直接显示PhotosPicker
-                    showPhotosPicker = true
-                } else if status == .notDetermined {
-                    // 未授权，请求授权
-                    PHPhotoLibrary.requestAuthorization { newStatus in
-                        DispatchQueue.main.async {
-                            if newStatus == .authorized {
-                                showPhotosPicker = true
-                            }
-                        }
-                    }
-                } else {
-                    // 权限被拒绝，显示提示
-                    print("相册访问权限被拒绝")
-                }
-            }) {
+            PhotosPicker(selection: $selectedImageItem, matching: .images) {
                 ZStack {
                     if let image = selectedImage {
                         // Compress and resize to 150x150
@@ -549,11 +529,6 @@ struct ImageUploadSection: View {
                 }
             }
             .buttonStyle(PlainButtonStyle())
-            .sheet(isPresented: $showPhotosPicker) {
-                PhotosPicker(selection: $selectedImageItem, matching: .images) {
-                    Text("选择照片")
-                }
-            }
         }
     }
 }
