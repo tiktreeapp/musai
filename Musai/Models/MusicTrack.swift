@@ -10,26 +10,26 @@ import SwiftData
 
 @Model
 final class MusicTrack {
-    var id: UUID
-    var title: String
-    var lyrics: String
-    var style: MusicStyle
-    var mode: MusicMode
-    var speed: MusicSpeed
-    var instrumentation: MusicInstrumentation
-    var vocal: MusicVocal
-    var imageData: Data?
-    var audioURL: String? // 原始URL（可能过期）
-    var localFilePath: String? // 本地缓存路径
-    var cloudinaryURL: String? // Cloudinary URL
-    var createdAt: Date
-    var duration: TimeInterval?
-    var isPlaying: Bool = false
-    var isCachedLocally: Bool = false
-    var isUploadedToCloud: Bool = false
-    var uploadDate: Date?
-    var lastPlayedAt: Date?
-    var playCount: Int = 0
+    @Attribute(.persisted) var id: UUID
+    @Attribute(.persisted) var title: String
+    @Attribute(.persisted) var lyrics: String
+    @Attribute(.persisted) var style: MusicStyle
+    @Attribute(.persisted) var mode: MusicMode
+    @Attribute(.persisted) var speed: MusicSpeed
+    @Attribute(.persisted) var instrumentation: MusicInstrumentation
+    @Attribute(.persisted) var vocal: MusicVocal
+    @Attribute(.persisted) var imageData: Data?
+    @Attribute(.persisted) var audioURL: String? // 原始URL（可能过期）
+    @Attribute(.persisted) var localFilePath: String? // 本地缓存路径
+    @Attribute(.persisted) var cloudinaryURL: String? // Cloudinary URL
+    @Attribute(.persisted) var createdAt: Date
+    @Attribute(.persisted) var duration: TimeInterval?
+    @Attribute(.persisted) var isPlaying: Bool = false
+    @Attribute(.persisted) var isCachedLocally: Bool = false
+    @Attribute(.persisted) var isUploadedToCloud: Bool = false
+    @Attribute(.persisted) var uploadDate: Date?
+    @Attribute(.persisted) var lastPlayedAt: Date?
+    @Attribute(.persisted) var playCount: Int = 0
     
     init(title: String, lyrics: String, style: MusicStyle, mode: MusicMode, speed: MusicSpeed, instrumentation: MusicInstrumentation, vocal: MusicVocal, imageData: Data? = nil, duration: TimeInterval? = nil) {
         self.id = UUID()
