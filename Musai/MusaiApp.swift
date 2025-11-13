@@ -31,10 +31,12 @@ struct MusaiApp: App {
                     print("🚀 Musai App started, showing WelcomeView")
                     // 初始化订阅管理器
                     SubscriptionManager.shared.loadDiamondCount()
-                    // 获取订阅产品
+                    // 获取订阅产品并检查订阅状态（包括兑换码）
                     Task {
                         await SubscriptionManager.shared.fetchProducts()
                         await SubscriptionManager.shared.checkSubscriptionStatus()
+                        // 验证收据以发现新兑换的订阅
+                        await SubscriptionManager.shared.verifyReceiptForNewSubscriptions()
                     }
                 }
         }

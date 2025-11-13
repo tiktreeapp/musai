@@ -42,6 +42,51 @@ final class SubscriptionManager: ObservableObject {
         }
     }
     
+    // MARK: - 验证收据以发现新兑换的订阅
+    func verifyReceiptForNewSubscriptions() async {
+        print("🔍 Verifying receipt for new subscriptions (including promo codes)...")
+        
+        // 检查当前的订阅状态
+        var hasNewSubscription = false
+        var newSubscriptionType: SubscriptionType = .none
+        
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let transaction) = result {
+                print("✅ Found verified transaction: \(transaction.productID)")
+                
+                // 检查是否是新的订阅（之前未记录）
+                if transaction.productID == weeklyProductID {
+                    // 检查是否已经记录了周订阅
+                    if currentSubscriptionType != .weekly {
+                        hasNewSubscription = true
+                        newSubscriptionType = .weekly
+                        addDiamonds(weeklyDiamonds)
+                        print("💎 New weekly subscription detected via promo code, +\(weeklyDiamonds) diamonds.")
+                    }
+                } else if transaction.productID == monthlyProductID {
+                    // 检查是否已经记录了月订阅
+                    if currentSubscriptionType != .monthly {
+                        hasNewSubscription = true
+                        newSubscriptionType = .monthly
+                        addDiamonds(monthlyDiamonds)
+                        print("💎 New monthly subscription detected via promo code, +\(monthlyDiamonds) diamonds.")
+                    }
+                }
+            }
+        }
+        
+        // 如果发现了新的订阅，更新状态
+        if hasNewSubscription {
+            currentSubscriptionType = newSubscriptionType
+            isSubscribed = true
+            UserDefaults.standard.set(newSubscriptionType.rawValue, forKey: "currentSubscriptionType")
+            UserDefaults.standard.set(Date(), forKey: "subscriptionPurchaseDate")
+            print("✅ Updated subscription status to: \(newSubscriptionType)")
+        }
+        
+        print("🔎 Receipt verification complete.")
+    }
+    
     // MARK: - 获取商品信息
     func fetchProducts() async {
         print("🔍 Fetching StoreKit products...")
