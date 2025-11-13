@@ -196,8 +196,7 @@ struct GenerationResultView: View {
                                     endPoint: .bottom
                                 )
                             )
-                            .frame(height: 300) // 增加高度0像素（300+10=310）
-                            .offset(y: 50) // 黑色背景额外向下移动50像素，与MyMusicsView保持一致
+                            .offset(y: 50) // 黑色背景额外向下移动50像素
                             .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: -5)
                     )
                 }
