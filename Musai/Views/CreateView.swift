@@ -523,6 +523,7 @@ struct ImageUploadSection: View {
                         .frame(width: 150, height: 150)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                 } else {
+                    // 仅在没有图片时，整个区域可点击选择图片
                     PhotosPicker(selection: $selectedImageItem, matching: .images) {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Theme.cardBackgroundColor)
