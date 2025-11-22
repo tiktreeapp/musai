@@ -154,6 +154,7 @@ struct StepRowView: View {
 struct StartButtonView: View {
     @State private var isAnimating = false
     @State private var showingCreateView = false
+    @StateObject private var musicService = MusicGenerationService()
     
     var body: some View {
         Button(action: {
@@ -163,6 +164,11 @@ struct StartButtonView: View {
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 isAnimating = false
+            }
+            
+            // Wake up backend service when user taps Start
+            Task {
+                await musicService.wakeUpBackendIfNeeded()
             }
             
             // Navigate to Create view

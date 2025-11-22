@@ -11,7 +11,7 @@ import StoreKit
 struct SubscriptionView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var subscriptionManager = SubscriptionManager.shared
-    @State private var selectedPlan: SubscriptionPlan = .weekly
+    @State private var selectedPlan: SubscriptionPlan = .monthly
     @State private var purchaseCompleted = false
     
     enum SubscriptionPlan {

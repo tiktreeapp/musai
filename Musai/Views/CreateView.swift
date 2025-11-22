@@ -43,6 +43,7 @@ struct CreateView: View {
     @State private var giftRotation = 0.0  // 礼物旋转角度
     @State private var giftRotationTimer: Timer?  // 旋转动画计时器
     @State private var hasReceivedDailyReward = false  // 今日是否已领取奖励
+    @State private var showingWaitAlert = false  // 音乐生成等待弹窗
     @Environment(\.modelContext) private var modelContext
     @StateObject private var musicService = MusicGenerationService()
     @State private var isCreating = false
@@ -92,6 +93,7 @@ struct CreateView: View {
             },
             showingGenerationResult: $showingGenerationResult,
             generatedMusicURL: $generatedMusicURL,
+            showingWaitAlert: $showingWaitAlert,
             canCreate: Binding(
                 get: { canCreate },
                 set: { _ in }
@@ -113,6 +115,10 @@ struct CreateView: View {
             isCreatingBinding: Binding(
                 get: { isCreating },
                 set: { isCreating = $0 }
+            ),
+            errorMessage: Binding(
+                get: { musicService.errorMessage },
+                set: { musicService.errorMessage = $0 }
             )
         )
     }
@@ -147,6 +153,13 @@ struct CreateView: View {
             cleanupView()
         }
         .overlay(overlayContent)
+        .alert("⏳ Pls Wait a moment", isPresented: $showingWaitAlert) {
+            Button("OK") {
+                // 点击OK继续等待
+            }
+        } message: {
+            Text("Each song(1-2 mins) takes 30-100 seconds to generate for more options.")
+        }
     }
     
     // MARK: - Computed Properties for Body
@@ -833,6 +846,7 @@ struct CreateButtonParams {
     
     @Binding var showingGenerationResult: Bool
     @Binding var generatedMusicURL: String?
+    @Binding var showingWaitAlert: Bool
     
     // CreateView properties that need to be passed
     var canCreateBinding: Binding<Bool>
@@ -840,6 +854,7 @@ struct CreateButtonParams {
     var lyricsBinding: Binding<String>
     var selectedImageBinding: Binding<UIImage?>
     var isCreatingBinding: Binding<Bool>
+    @Binding var errorMessage: String?
     
     init(
         selectedImage: UIImage?,
@@ -857,11 +872,13 @@ struct CreateButtonParams {
         onInsufficientDiamonds: @escaping () -> Void,
         showingGenerationResult: Binding<Bool>,
         generatedMusicURL: Binding<String?>,
+        showingWaitAlert: Binding<Bool>,
         canCreate: Binding<Bool>,
         titleBinding: Binding<String>,
         lyricsBinding: Binding<String>,
         selectedImageBinding: Binding<UIImage?>,
-        isCreatingBinding: Binding<Bool>
+        isCreatingBinding: Binding<Bool>,
+        errorMessage: Binding<String?>
     ) {
         self.selectedImage = selectedImage
         self.title = title
@@ -878,6 +895,8 @@ struct CreateButtonParams {
         self.onInsufficientDiamonds = onInsufficientDiamonds
         self._showingGenerationResult = showingGenerationResult
         self._generatedMusicURL = generatedMusicURL
+        self._showingWaitAlert = showingWaitAlert
+        self._errorMessage = errorMessage
         
         self.canCreateBinding = canCreate
         self.titleBinding = titleBinding
@@ -939,10 +958,15 @@ struct CreateButtonView: View {
             // 立即设置isCreating为true，防止重复点击
             isCreating = true
             
+            // 显示等待弹窗
+            params.showingWaitAlert = true
+            
             // Dismiss keyboard
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             
             Task {
+                // Wake up backend before starting music generation
+                await params.musicService.wakeUpBackendIfNeeded()
                 await createMusic()
             }
         }) {
@@ -996,6 +1020,9 @@ struct CreateButtonView: View {
     private func createMusic() async {
         // 检查是否有足够的钻石
         if !SubscriptionManager.shared.canCreateSong() {
+            // 关闭等待弹窗
+            params.showingWaitAlert = false
+            
             print("💎 Not enough diamonds to create song, showing subscription view")
             // 调用回调函数显示订阅页面
             params.onInsufficientDiamonds()
@@ -1029,6 +1056,9 @@ struct CreateButtonView: View {
         do {
             // Generate music with backend API
             guard let image = params.selectedImage else {
+                // 关闭等待弹窗
+                params.showingWaitAlert = false
+                
                 print("❌ No image selected - cannot proceed")
                 params.isCreatingBinding.wrappedValue = false
                 return
@@ -1038,6 +1068,9 @@ struct CreateButtonView: View {
             
             let prompt = params.lyrics  // 仅使用歌词文本生成歌曲，不包含标题
             guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+                // 关闭等待弹窗
+                params.showingWaitAlert = false
+                
                 print("❌ Failed to compress image")
                 params.isCreatingBinding.wrappedValue = false
                 return
@@ -1102,6 +1135,9 @@ struct CreateButtonView: View {
             SubscriptionManager.shared.useDiamonds()
             print("💎 Remaining diamonds: \(SubscriptionManager.shared.diamondCount)")
             
+            // 关闭等待弹窗
+            params.showingWaitAlert = false
+            
             // 重置创建状态
             params.isCreatingBinding.wrappedValue = false
             print("✅ Create button state reset")
@@ -1132,6 +1168,9 @@ struct CreateButtonView: View {
             }
             
         } catch {
+            // 关闭等待弹窗
+            params.showingWaitAlert = false
+            
             let timestamp = DateFormatter().string(from: Date())
             print("❌ [\(timestamp)] Error creating music: \(error)")
             NSLog("❌ MUSIC CREATION ERROR: \(error)")
@@ -1192,6 +1231,7 @@ struct CreateButtonView: View {
             }
             
             await MainActor.run {
+                params.errorMessage = error.localizedDescription
                 params.isCreatingBinding.wrappedValue = false
                 print("🔄 Reset isCreating flag to false")
             }

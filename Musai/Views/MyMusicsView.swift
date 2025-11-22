@@ -493,6 +493,10 @@ struct TrackDetailView: View {
                 if let playableURL = storageService.getPlayableURL(for: track) {
                     print("🎵 Loading audio from playable URL: \(playableURL.lastPathComponent)")
                     audioPlayer.loadAudio(from: playableURL)
+                    // 自动播放音乐
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        audioPlayer.play()
+                    }
                 } else {
                     print("❌ No playable URL available for track: \(track.title)")
                 }

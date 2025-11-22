@@ -87,6 +87,59 @@ final class MusicGenerationService: ObservableObject {
         }
     }
     
+    // MARK: - Backend Wake-up Methods
+    func wakeUpBackendIfNeeded() async {
+        print("🔍 Checking if backend needs to be woken up...")
+        
+        // Try to ping the backend health endpoint
+        let url = URL(string: "\(backendURL)/health")
+        
+        do {
+            let (_, response) = try await URLSession.shared.data(from: url!)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 200 {
+                    print("✅ Backend is already awake (status: \(httpResponse.statusCode))")
+                    return
+                } else {
+                    print("⚠️ Backend responded with status: \(httpResponse.statusCode), attempting to wake up...")
+                }
+            }
+        } catch {
+            print("⚠️ Backend is not responding, attempting to wake up...")
+        }
+        
+        // If we reach here, the backend may be sleeping, so we'll try to wake it up
+        await attemptToWakeUpBackend()
+    }
+    
+    private func attemptToWakeUpBackend() async {
+        print("🚀 Attempting to wake up backend service...")
+        
+        let maxRetries = 3
+        var retryCount = 0
+        
+        while retryCount < maxRetries {
+            do {
+                let request = URLRequest(url: URL(string: "\(backendURL)/health")!)
+                let (_, response) = try await URLSession.shared.data(for: request)
+                
+                if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                    print("✅ Backend successfully woken up!")
+                    return
+                }
+            } catch {
+                print("⚠️ Attempt \(retryCount + 1) failed: \(error)")
+            }
+            
+            retryCount += 1
+            print("⏳ Waiting before retry \(retryCount)/\(maxRetries)...")
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // Wait 2 seconds before retry
+        }
+        
+        print("❌ Failed to wake up backend after \(maxRetries) attempts")
+    }
+    
     private func logDebug(_ message: String) {
         print("🔍 MusicGeneration: \(message)")
         NSLog("MusicGeneration: \(message)")
@@ -123,6 +176,10 @@ final class MusicGenerationService: ObservableObject {
         if imageData != nil {
             print("📷 Image size: \(imageData!.count) bytes")
         }
+        
+        // Wake up backend service before starting music generation
+        print("🔍 Checking backend status before music generation...")
+        await wakeUpBackendIfNeeded()
         
         isGenerating = true
         generationProgress = 0.0
@@ -356,6 +413,10 @@ final class MusicGenerationService: ObservableObject {
                     let fullURLString = urlString.hasPrefix("http") ? urlString : "\(backendURL)\(urlString)"
                     print("🎵 Full music URL: \(fullURLString)")
                     if let musicURL = URL(string: fullURLString) {
+                        // 音乐生成成功，请求评价
+                        Task { @MainActor in
+                            ReviewPromptService.shared.checkAndRequestReview()
+                        }
                         return musicURL
                     } else {
                         print("❌ Music generation succeeded but invalid musicURL: \(fullURLString)")
