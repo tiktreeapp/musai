@@ -298,7 +298,6 @@ struct CreateView: View {
     }
     
     private func setupView() {
-        requestPhotoLibraryPermission()
         checkDailyRewardStatus()
         checkGiftButtonStatus()
         startGiftRotationAnimation()
