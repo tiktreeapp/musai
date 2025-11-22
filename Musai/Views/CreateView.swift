@@ -137,10 +137,7 @@ struct CreateView: View {
         .blur(radius: showingDailyReward ? 5 : 0)
         .animation(.easeInOut(duration: 0.3), value: showingDailyReward)
         .onChange(of: selectedImageItem) { _, newItem in
-            print("DEBUG: Picker changed:", newItem as Any)
-            // 安全判断：确保只有在用户真实"选择"后才处理
-            guard let item = newItem else { return }   // 防止页面重建触发
-            handleImageChange(item)
+            handleImageChange(newItem)
         }
         .sheet(isPresented: $showingGenerationResult) {
             generationResultSheet
@@ -298,6 +295,7 @@ struct CreateView: View {
     }
     
     private func setupView() {
+        requestPhotoLibraryPermission()
         checkDailyRewardStatus()
         checkGiftButtonStatus()
         startGiftRotationAnimation()
@@ -516,17 +514,16 @@ struct ImageUploadSection: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            ZStack {
-                if let image = selectedImage {
-                    // Compress and resize to 150x150
-                    Image(uiImage: compressImage(image, CGSize(width: 150, height: 150)))
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 150, height: 150)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                } else {
-                    // 仅在没有图片时，整个区域可点击选择图片
-                    PhotosPicker(selection: $selectedImageItem, matching: .images) {
+            PhotosPicker(selection: $selectedImageItem, matching: .images) {
+                ZStack {
+                    if let image = selectedImage {
+                        // Compress and resize to 150x150
+                        Image(uiImage: compressImage(image, CGSize(width: 150, height: 150)))
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 150, height: 150)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                    } else {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Theme.cardBackgroundColor)
                             .frame(width: 150, height: 150)
@@ -542,9 +539,9 @@ struct ImageUploadSection: View {
                                 }
                             )
                     }
-                    .buttonStyle(PlainButtonStyle())
                 }
             }
+            .buttonStyle(PlainButtonStyle())
         }
     }
 }
