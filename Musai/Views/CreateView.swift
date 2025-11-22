@@ -137,11 +137,10 @@ struct CreateView: View {
         .blur(radius: showingDailyReward ? 5 : 0)
         .animation(.easeInOut(duration: 0.3), value: showingDailyReward)
         .onChange(of: selectedImageItem) { _, newItem in
-            // 只有在 newItem 不为 nil 时才处理图片选择
-            // 添加额外检查以避免页面初始化时的意外触发
-            if newItem != nil {
-                handleImageChange(newItem)
-            }
+            print("DEBUG: Picker changed:", newItem as Any)
+            // 安全判断：确保只有在用户真实"选择"后才处理
+            guard let item = newItem else { return }   // 防止页面重建触发
+            handleImageChange(item)
         }
         .sheet(isPresented: $showingGenerationResult) {
             generationResultSheet
