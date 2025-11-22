@@ -374,6 +374,8 @@ struct SettingsView: View {
     private func refreshPremiumAvatars() {
         premiumAvatars = generateRandomAvatars()
     }
+    
+    // 奖励弹窗修复完成 - 2025-11-22
 }
 
 #Preview {
