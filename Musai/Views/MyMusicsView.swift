@@ -218,7 +218,8 @@ struct MusicTrackCard: View {
                             Spacer()
                             
                             Button(action: {
-                                // Quick play action
+                                // Quick play action - now it will trigger the same action as tapping the card
+                                onTap()
                             }) {
                                 ZStack {
                                     Circle()

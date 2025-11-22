@@ -609,7 +609,7 @@ struct LyricsInputSection: View {
             }
             .frame(maxWidth: .infinity)
             
-            // 第二行: Lyrics 标签和 Create/Paste/Clear 按钮
+            // 第二行: Lyrics 标签和 Generate/Paste/Clear 按钮
             HStack {
                 Text("Lyrics")
                     .font(.headline)
@@ -619,9 +619,11 @@ struct LyricsInputSection: View {
                 
                 // 根据模式显示不同按钮
                 if lyricsMode == .aiLyrics {
-                    // AI Lyrics 模式 - Create 按钮
+                    // AI Lyrics 模式 - Generate 按钮
                     Button(action: {
                         generateAILyrics()
+                        // Dismiss keyboard when clicking Generate button
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     }) {
                         HStack {
                             if isGeneratingLyrics {
@@ -629,7 +631,7 @@ struct LyricsInputSection: View {
                                     .progressViewStyle(CircularProgressViewStyle(tint: Theme.primaryColor))
                                     .scaleEffect(0.5)
                             }
-                            Text("Create")
+                            Text("Generate")
                                 .font(.system(size: 14, weight: .medium))
                         }
                         .foregroundColor(Theme.primaryColor) // 绿色文本
@@ -670,7 +672,7 @@ struct LyricsInputSection: View {
                 // Placeholder text - 根据模式显示不同提示
                 if (lyricsMode == .aiLyrics ? aiLyrics : ownLyrics).isEmpty && !isFocused {
                     Text(lyricsMode == .aiLyrics ? 
-                         "Enter a Title and 'Create' lyrics fit your title by AI" : 
+                         "Enter a Title and 'Generate' lyrics fit your title by AI" : 
                          "Input the lyrics with [intro][Verse][Chorus][Outro] tags")
                         .font(.system(size: 16))
                         .foregroundColor(Theme.textColor.opacity(0.5))
