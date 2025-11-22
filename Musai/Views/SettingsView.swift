@@ -183,6 +183,13 @@ struct SettingsView: View {
             if premiumAvatars.isEmpty {
                 premiumAvatars = generateRandomAvatars()
             }
+            // 确保每次进入设置页面时都检查版本状态
+            DispatchQueue.main.async {
+                // 如果当前版本与已评价版本不同，则显示钻石奖励
+                if !hasReviewedForCurrentVersion() && !reviewRewardTimerActive {
+                    // 版本不同且不在计时期间，确保状态正确
+                }
+            }
         }
     }
     
@@ -297,7 +304,7 @@ struct SettingsView: View {
         print("💎 Share reward: +2 diamonds")
         
         // 显示余额增加弹窗
-        showAlert(title: "👏 Successfully", message: "You balance increased by 💎 2.")
+        showAlert(title: "👏 Successfully", message: "Your balance increased by 💎 2.")
     }
     
     private func giveReviewReward() {
@@ -312,7 +319,7 @@ struct SettingsView: View {
             print("💎 Review reward: +5 diamonds for version \(currentVersion)")
             
             // 显示余额增加弹窗
-            showAlert(title: "👏 Successfully", message: "You balance increased by 💎 5.")
+            showAlert(title: "👏 Successfully", message: "Your balance increased by 💎 5.")
         } else {
             print("📝 Already reviewed for version \(currentVersion)")
         }
@@ -331,11 +338,20 @@ struct SettingsView: View {
     }
     
     private func showAlert(title: String, message: String) {
-        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            window.rootViewController?.present(alert, animated: true)
+        DispatchQueue.main.async {
+            let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            
+            // 尝试找到最顶层的视图控制器来显示弹窗
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first {
+                var topController = window.rootViewController
+                while let presentedViewController = topController?.presentedViewController {
+                    topController = presentedViewController
+                }
+                
+                topController?.present(alert, animated: true)
+            }
         }
     }
     
