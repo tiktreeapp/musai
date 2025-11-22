@@ -137,7 +137,11 @@ struct CreateView: View {
         .blur(radius: showingDailyReward ? 5 : 0)
         .animation(.easeInOut(duration: 0.3), value: showingDailyReward)
         .onChange(of: selectedImageItem) { _, newItem in
-            handleImageChange(newItem)
+            // 只有在 newItem 不为 nil 时才处理图片选择
+            // 添加额外检查以避免页面初始化时的意外触发
+            if newItem != nil {
+                handleImageChange(newItem)
+            }
         }
         .sheet(isPresented: $showingGenerationResult) {
             generationResultSheet
