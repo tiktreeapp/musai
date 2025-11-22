@@ -514,16 +514,16 @@ struct ImageUploadSection: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            PhotosPicker(selection: $selectedImageItem, matching: .images) {
-                ZStack {
-                    if let image = selectedImage {
-                        // Compress and resize to 150x150
-                        Image(uiImage: compressImage(image, CGSize(width: 150, height: 150)))
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 150, height: 150)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                    } else {
+            ZStack {
+                if let image = selectedImage {
+                    // Compress and resize to 150x150
+                    Image(uiImage: compressImage(image, CGSize(width: 150, height: 150)))
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 150, height: 150)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                } else {
+                    PhotosPicker(selection: $selectedImageItem, matching: .images) {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Theme.cardBackgroundColor)
                             .frame(width: 150, height: 150)
@@ -539,9 +539,9 @@ struct ImageUploadSection: View {
                                 }
                             )
                     }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
-            .buttonStyle(PlainButtonStyle())
         }
     }
 }
