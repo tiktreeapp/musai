@@ -105,16 +105,16 @@ struct SubscriptionView: View {
                     // Plan selection buttons
                     HStack(spacing: 20) {
                         SubscriptionPlanButton(
-                            title: "Weekly",
-                            price: getWeeklyPrice(),
+                            title: getWeeklyPrice(),
+                            subtitle: "Weekly",
                             isSelected: selectedPlan == .weekly
                         ) {
                             selectedPlan = .weekly
                         }
                         
                         SubscriptionPlanButton(
-                            title: "Monthly",
-                            price: getMonthlyPrice(),
+                            title: getMonthlyPrice(),
+                            subtitle: "Monthly",
                             isSelected: selectedPlan == .monthly,
                             hasDiscount: true,
                             discountText: "40% OFF"
@@ -276,15 +276,15 @@ struct SubscriptionView: View {
 
 struct SubscriptionPlanButton: View {
     let title: String
-    let price: String
+    let subtitle: String
     let isSelected: Bool
     let hasDiscount: Bool
     let discountText: String
     let action: () -> Void
     
-    init(title: String, price: String, isSelected: Bool, hasDiscount: Bool = false, discountText: String = "", action: @escaping () -> Void) {
+    init(title: String, subtitle: String, isSelected: Bool, hasDiscount: Bool = false, discountText: String = "", action: @escaping () -> Void) {
         self.title = title
-        self.price = price
+        self.subtitle = subtitle
         self.isSelected = isSelected
         self.hasDiscount = hasDiscount
         self.discountText = discountText
@@ -296,11 +296,11 @@ struct SubscriptionPlanButton: View {
             Button(action: action) {
                 VStack(spacing: 4) {
                     Text(title)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 20, weight: .bold)) // 调大价格字体到20号
                         .foregroundColor(isSelected ? .white : Color.white.opacity(0.5)) // 未选中时文本50%透明度
                     
-                    Text(price)
-                        .font(.system(size: 20, weight: .bold))
+                    Text(subtitle)
+                        .font(.system(size: 16, weight: .bold)) // 调小周期字体到16号
                         .foregroundColor(isSelected ? .white : Color.white.opacity(0.5)) // 未选中时文本50%透明度
                 }
                 .frame(maxWidth: .infinity)
